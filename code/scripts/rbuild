@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <executable_name> [compiler]"
+    echo "Example: $0 router gcc"
+    exit 1
+fi
+
+EXEC_NAME=$1
+CC=${2:-gcc}
+
+CFLAGS="-pedantic -Wall -Wextra -O3"
+CINCL="./code/DCN/include"
+CLIB="./code/DCN/lib"
+LIBS="-lm"
+
+reset
+SRC_FILES=$(find ./code/DCN/src -type f -name "*.c")
+
+$CC $CFLAGS -o "$EXEC_NAME" ./code/"$EXEC_NAME".c $SRC_FILES -I $CINCL -L $CLIB $LIBS
+
+if [ $? -eq 0 ]; then
+    echo -e "\033[1;32mCompilation successful!\033[0m"
+    mv "$EXEC_NAME" ./bin/
+    echo "Executable moved to ./bin/$EXEC_NAME"
+else
+    echo -e "\033[1;31mCompilation failed!\033[0m"
+    exit 1
+fi

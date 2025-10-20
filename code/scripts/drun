@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+reset
+
+    # --exit-on-first-error=yes \
+valgrind \
+    --leak-check=full \
+    --show-leak-kinds=all \
+    --track-origins=yes \
+    --suppressions=./code/scripts/valgrind.supp ./bin/"$1" "${@:2}"
