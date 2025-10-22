@@ -23,6 +23,9 @@ struct client {
     
     size_t alr_written;
     size_t uid;
+
+    char ip[20];
+    unsigned short port;
 };
 
 struct socket_md {

@@ -31,6 +31,9 @@ void __coroutine_free(
 void __workers_strct_init(
     struct __workers_strct *strc
 ){
+    strc->_mtx = malloc(sizeof(mtx_t));
+    mtx_init(strc->_mtx, mtx_plain);
+
     strc->workers = NULL;
     strc->workers_num = 0;
 }
@@ -38,8 +41,13 @@ void __workers_strct_init(
 void __workers_strct_free(
     struct __workers_strct *strc
 ){
-    free(strc->workers);
+    mtx_destroy(strc->_mtx);
+    free(strc->_mtx);
+    strc->_mtx = NULL;
+
     strc->workers_num = 0;
+    free(strc->workers);
+    strc->workers = NULL;
 }
 
 void __event_init(
@@ -74,20 +82,49 @@ ullong asyncio_create_event(
     return event->uid;
 }
 
-void asyncio_subscribe(
+bool asyncio_subscribe(
     struct ev_loop *loop,
     ullong event_uid,
     struct function worker
 ){
-    if (!map_in()){
-        return
-    }
+    if (!map_in(&loop->events, &event_uid))
+        return false;
+
+    struct __workers_strct *strc = NULL;
+    map_at(&loop->workers, &event_uid, (void**)&strc);
+    if (strc == NULL)
+        return false;
+
+    mtx_lock(strc->_mtx);
+    strc->workers = realloc(strc->workers, sizeof(struct __workers_strct) * (
+        strc->workers_num + 1
+    ));
+    strc->workers[strc->workers_num] = worker;
+    strc->workers_num += 1;
+    mtx_unlock(strc->_mtx);
+
+    return true;
 }
 
 void asyncio_remevent(
+    struct ev_loop *loop,
     ullong event_uid
 ){
+    if (!map_in(&loop->events, &event_uid))
+        return;
 
+    struct __workers_strct *strc = NULL;
+    map_at(&loop->workers, &event_uid, (void**)&strc);
+    if (strc == NULL)
+        return;
+
+    struct asyncio_event *event = NULL;
+    map_at(&loop->events, &event_uid, (void**)&event);
+    if (event == NULL)
+        return;
+
+    __event_free(event);
+    __workers_strct_free(strc);
 }
 
 
@@ -134,12 +171,56 @@ void __loop_worker(
     free(crt);
 }
 
+int __events_worker(void *_args){
+    struct ev_loop *loop = _args;
+
+    while (atomic_load(&loop->working_pool.is_active)){
+        mtx_lock(&loop->events._mtx);
+        size_t ev_len = loop->events.len;
+        mtx_unlock(&loop->events._mtx);
+        
+        for (size_t i = 0; i < ev_len; i++){
+            ullong ev_uid = 0;
+            map_key_at( &loop->events, &ev_uid, i );
+
+            if (ev_uid == 0)
+                continue;
+
+            struct asyncio_event *event = NULL;
+            map_at(&loop->events, &ev_uid, (void**)&event);
+
+            if (event == NULL)
+                continue;
+
+            if (event->trigger.func(loop)){
+                struct __workers_strct *strc = NULL;
+                map_at(&loop->workers, &ev_uid, (void**)&strc);
+                if (strc == NULL)
+                    continue;
+
+                mtx_lock(strc->_mtx);
+                for (size_t i = 0; i < strc->workers_num; i++){
+                    async_create(
+                        loop,
+                        strc->workers[i].func,
+                        loop
+                    );
+                }
+                mtx_unlock(strc->_mtx);
+            }
+        }
+    }
+
+    return thrd_success;
+}
+
 void loop_create(
-    struct ev_loop *loop
+    struct ev_loop *loop,
+    ssize_t cores
 ){
     mtx_init(&loop->events_mtx, mtx_plain);
-    pool_init(&loop->working_pool, __loop_worker, sysconf(_SC_NPROCESSORS_ONLN) * 2);
-    loop->g_euid = 0;
+    pool_init(&loop->working_pool, __loop_worker, cores == -1 ? (sysconf(_SC_NPROCESSORS_ONLN) * 2): cores);
+    loop->g_euid = 1;
     map_init(
         &loop->workers, 
         sizeof(ullong), 
@@ -150,6 +231,7 @@ void loop_create(
         sizeof(ullong), 
         sizeof(struct asyncio_event*)
     );
+    thrd_create(&loop->events_thread, __events_worker, loop);
 }
 
 void loop_run(
@@ -161,6 +243,7 @@ void loop_run(
 void loop_stop(
     struct ev_loop *loop
 ){
+    thrd_join(loop->events_thread, NULL);
     mtx_destroy(&loop->events_mtx);
     pool_free(&loop->working_pool);
 

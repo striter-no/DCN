@@ -153,6 +153,8 @@ int accept_client(
     client->fd = cli_md->fd;
     client->alr_written = 0;
     client->uid = ++serv_md->last_uid;
+    strcpy(client->ip, cli_md->ip);
+    client->port = cli_md->port;
     queue_init(&client->read_q);
     queue_init(&client->write_q);
 

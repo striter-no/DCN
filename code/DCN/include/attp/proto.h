@@ -24,3 +24,7 @@ bool attp_msg_deserial(
     struct qblock *qb, 
     struct attp_message *msg
 );
+
+struct attp_message dupl_message(
+    struct attp_message *origin
+);

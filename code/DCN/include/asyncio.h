@@ -21,10 +21,11 @@ struct coroutine {
 };
 
 struct function {
-    void (*func)(void *args);
+    void *(*func)(void *args);
 };
 
 struct __workers_strct {
+    mtx_t *_mtx;
     struct function *workers;
     size_t workers_num;
 };
@@ -39,6 +40,9 @@ struct ev_loop {
 
     // ullong (event uid) : __workers_strct
     struct map  workers;
+
+    // checks every trigger, starts coroutine if triggered
+    thrd_t events_thread;
 };
 
 struct asyncio_event {
@@ -67,12 +71,13 @@ ullong asyncio_create_event(
     struct ev_loop *loop,
     struct function func
 );
-void asyncio_subscribe(
+bool asyncio_subscribe(
     struct ev_loop *loop,
     ullong event_uid,
     struct function worker
 );
 void asyncio_remevent(
+    struct ev_loop *loop,
     ullong event_uid
 );
 
@@ -99,7 +104,7 @@ void __loop_worker(
     struct qblock *out
 );
 
-void loop_create(struct ev_loop *loop);
+void loop_create(struct ev_loop *loop, ssize_t cores);
 void loop_run(struct ev_loop *loop);
 void loop_stop(struct ev_loop *loop);
 
