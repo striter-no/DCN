@@ -46,6 +46,21 @@ bool map_at(struct map *map, void *key, void **out){
     return true;
 }
 
+bool map_in(struct map *map, void *key){
+    mtx_lock(&map->_mtx);
+    bool found = false;
+    for (size_t ki = 0; ki < map->len; ki++){
+        char *k = (char*)(map->keys) + ki * (map->k_size);
+        if (memcmp(k, key, map->k_size) == 0){
+            found = true;
+            break;
+        }
+    }
+    
+    mtx_unlock(&map->_mtx);
+    return found;
+}
+
 // returns a shallow copy
 bool map_copy_at(struct map *map, void *key, void *out){
     mtx_lock(&map->_mtx);

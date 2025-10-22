@@ -22,6 +22,7 @@ void map_free(struct map *map);
 
 bool map_at(struct map *map, void *key, void **out);
 bool map_copy_at(struct map *map, void *key, void *out);
+bool map_in(struct map *map, void *key);
 
 int map_set(struct map *map, void *key, void *val);
 int map_erase(struct map *map, void *key);

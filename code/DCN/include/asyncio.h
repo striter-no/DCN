@@ -1,12 +1,16 @@
 #pragma once
 #include "queue.h"
 #include <map.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <sys/types.h>
 #include <thr-pool.h>
 #include <threads.h>
 #include <unistd.h>
 
 typedef struct future Future;
 #define asyncdef void *
+typedef unsigned long long ullong;
 
 struct coroutine {
     void *args;
@@ -14,12 +18,63 @@ struct coroutine {
 
     cnd_t *is_done;
     mtx_t *cnd_mtx;
-    size_t uid;
+};
+
+struct function {
+    void (*func)(void *args);
+};
+
+struct __workers_strct {
+    struct function *workers;
+    size_t workers_num;
 };
 
 struct ev_loop {
+    atomic_ullong g_euid;
     struct pool working_pool;
+
+    mtx_t events_mtx;
+    // ullong (event uid): asyncio_event
+    struct map events;
+
+    // ullong (event uid) : __workers_strct
+    struct map  workers;
 };
+
+struct asyncio_event {
+    struct qblock      data;
+    struct ev_loop    *looop;
+    ullong uid;
+
+    struct function    trigger;
+};
+
+void __workers_strct_init(
+    struct __workers_strct *strc
+);
+
+void __workers_strct_free(
+    struct __workers_strct *strc
+);
+
+void __event_init(
+    struct asyncio_event *event,
+    struct ev_loop *loop,
+    struct function func
+);
+void __event_free(struct asyncio_event *event);
+ullong asyncio_create_event(
+    struct ev_loop *loop,
+    struct function func
+);
+void asyncio_subscribe(
+    struct ev_loop *loop,
+    ullong event_uid,
+    struct function worker
+);
+void asyncio_remevent(
+    ullong event_uid
+);
 
 void __coroutine_init(
     struct coroutine *crt,
