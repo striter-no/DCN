@@ -28,7 +28,9 @@ int __worker(void *_args){
             struct attp_message *msg = malloc(sizeof(struct attp_message));
             if(attp_msg_deserial(&block, msg)){
                 // new response
+                #ifdef DEBUGGING
                 printf("got new response %zu\n", msg->uid);
+                #endif
                 map_set(
                     &session->pending_responses,
                     &msg->uid,
@@ -39,7 +41,9 @@ int __worker(void *_args){
         }
 
         while (!queue_empty(&session->pending_msgs)){
+            #ifdef DEBUGGING
             printf("forwarding message\n");
+            #endif
             queue_forward(
                 wargs.qw, 
                 &session->pending_msgs, 
@@ -101,13 +105,21 @@ void attp_new_session(
 void attp_end_session(
     struct attp_session *session
 ){  
+    #ifdef DEBUGGING
     printf("storing false to is_running\n");
+    #endif
     atomic_store(&session->is_running, false);
+    #ifdef DEBUGGING
     printf("waiting __worker()\n");
+    #endif
     thrd_join(session->worker, NULL);
+    #ifdef DEBUGGING
     printf("waiting __runner()\n");
+    #endif
     thrd_join(session->main_io, NULL);
+    #ifdef DEBUGGING
     printf("all threads joined\n");
+    #endif
 
     map_free(&session->pending_responses);
     queue_free(&session->pending_msgs);
@@ -135,10 +147,12 @@ void *__response_waiter(void *_args){
             &args->attp_muid,
             (void**)&msg
         );
-        if (msg != NULL){
+        // if (msg != NULL){
+            #ifdef DEBUGGING
             printf("__reponse_waiter() new response got\n");
+            #endif
             // map_erase(&args->session->pending_responses, &args->attp_muid);
-        }
+        // }
 
         thrd_sleep(&(struct timespec){
             .tv_sec = 0,

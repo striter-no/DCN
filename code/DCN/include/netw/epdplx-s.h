@@ -75,7 +75,8 @@ int sfull_write(
 int accept_client(
     struct socket_md *serv_md,
     int epfd,
-    struct socket_md *cli_md
+    struct socket_md *cli_md,
+    struct client **cli_out
 );
 
 int close_client(int epfd, struct client *cli);
@@ -84,5 +85,7 @@ int run_server(
     struct socket_md *server,
     struct pool *worker_pool,
     atomic_bool *is_running,
+    void (*custom_acceptor)(struct client *cli, void *state_holder),
+    void (*custom_disconnector)(struct client *cli, void *state_holder),
     void *state_holder
 );

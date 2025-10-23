@@ -18,18 +18,15 @@ int main(){
     qblock_init(&msg.data);
     qblock_fill(&msg.data, "Hello", 6);
     
-    printf("initializing session...\n");
     struct attp_session session;
     attp_new_session(
         &session, 
         &loop, 
         &md, 456
     );
-        printf("sending request\n");
         Future *resp = attp_request(&session, &msg);
         attp_free_msg(&msg);
 
-        printf("starting to await future\n");
         struct attp_message *rmsg = (
             struct attp_message *
         ) await(resp);
@@ -39,15 +36,9 @@ int main(){
         attp_free_msg(rmsg); // hooray
         free(rmsg);
         free(resp);
-        
-        printf("ending session...\n");
     
     attp_end_session(&session);
     
-    
-    
     loop_stop(&loop);
     close(md.fd);
-    
-    printf("end\n");
 }

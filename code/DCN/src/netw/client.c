@@ -99,7 +99,9 @@ void run_client(
     }};
 
     size_t alr_wr = 0;
+    #ifdef DEBUGGING
     printf("starting main loop\n");
+    #endif
     while (atomic_load(is_running)){
         int pret = poll(fds, 1, 100);
         if (pret == -1){
@@ -108,7 +110,9 @@ void run_client(
             break;
         } else if (pret > 0){
             if (fds[0].revents & POLLIN){
+                #ifdef DEBUGGING
                 printf("reading from server\n");
+                #endif
                 struct qblock block;
                 qblock_init(&block);
                 int rstat = cfull_read(md, &block.data, &block.dsize);
@@ -116,7 +120,9 @@ void run_client(
                     atomic_store(is_running, false);
                     break;
                 }
+                #ifdef DEBUGGING
                 printf("just read (%zu bytes): %s\n", block.dsize, block.data);
+                #endif
                 push_block(qread, &block);
                 qblock_free(&block);
             } else if (fds[0].revents & POLLOUT){
@@ -124,7 +130,9 @@ void run_client(
                     struct qblock block;
                     qblock_init(&block);
                     peek_block(qwrite, &block);
+                    #ifdef DEBUGGING
                     printf("writing to the server: %s\n", block.data);
+                    #endif
 
                     if (cfull_write(md, block.data, block.dsize, &alr_wr) == 0){
                         pop_block(qwrite, NULL);   

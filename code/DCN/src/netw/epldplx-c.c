@@ -133,7 +133,8 @@ int sfull_write(
 int accept_client(
     struct socket_md *serv_md,
     int epfd,
-    struct socket_md *cli_md
+    struct socket_md *cli_md,
+    struct client **cli_out
 ){
     cli_md->in_al = sizeof(cli_md->inaddr);
     cli_md->fd = accept4(
@@ -157,6 +158,8 @@ int accept_client(
     client->port = cli_md->port;
     queue_init(&client->read_q);
     queue_init(&client->write_q);
+
+    *cli_out = client;
 
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, cli_md->fd, &(struct epoll_event){
         .events = EPOLLIN,
@@ -199,6 +202,8 @@ int run_server(
     struct socket_md *server,
     struct pool *worker_pool,
     atomic_bool *is_running,
+    void (*custom_acceptor)(struct client *cli, void *state_holder),
+    void (*custom_disconnector)(struct client *cli, void *state_holder),
     void *state_holder
 ){
     int epfd;
@@ -221,17 +226,21 @@ int run_server(
             struct epoll_event ev = events[i];
 
             if (ev.data.ptr == NULL){
+                struct client *ptr = NULL;
                 struct socket_md cli_md;
-                ret = accept_client(server, epfd, &cli_md);
+                ret = accept_client(server, epfd, &cli_md, &ptr);
                 
                 if (ret != 0){
                     fprintf(stderr, "cannot accept client: %s\n", strerror(errno));
                     break;
                 }
+
+                custom_acceptor(ptr, state_holder);
             } else {
                 struct client *cli = ev.data.ptr;
 
                 if (ev.events & (EPOLLHUP | EPOLLERR)) {
+                    custom_disconnector(cli, state_holder);
                     close_client(epfd, cli);
                     continue;
                 }
