@@ -129,14 +129,16 @@ void *__response_waiter(void *_args){
 
     struct attp_message *msg = NULL;
     while (msg == NULL && atomic_load(&args->session->is_running)){
-
+        
         map_at(
             &args->session->pending_responses,
             &args->attp_muid,
             (void**)&msg
         );
-
-        map_erase(&args->session->pending_responses, &args->attp_muid);
+        if (msg != NULL){
+            printf("__reponse_waiter() new response got\n");
+            // map_erase(&args->session->pending_responses, &args->attp_muid);
+        }
 
         thrd_sleep(&(struct timespec){
             .tv_sec = 0,
