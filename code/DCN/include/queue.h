@@ -35,3 +35,5 @@ int peek_block(struct queue *q, struct qblock *b);
 
 void generic_qbfill(struct qblock *out, void *data, size_t data_size);
 void generic_qbout(struct qblock *inp, void *out, size_t data_size);
+
+bool queue_forward(struct queue *to, struct queue *from, bool peek);

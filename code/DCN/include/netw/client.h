@@ -21,7 +21,6 @@ struct worker_args {
     atomic_bool *is_running;
     struct queue *qr; // read from
     struct queue *qw; // push to
-    void (*worker_fn)(struct qblock *, struct qblock *);
 };
 
 struct socket_md {
@@ -33,15 +32,15 @@ struct socket_md {
     unsigned short port;
 };
 
-struct c_state {
-    struct socket_md *sock;
-    struct queue qread;
-    struct queue qwrite;
-    thrd_t _wthread;
+// struct c_state {
+//     struct socket_md *sock;
+//     struct queue qread;
+//     struct queue qwrite;
+//     thrd_t _wthread;
     
-    void (*worker)(struct qblock *, struct qblock *);
-    atomic_bool  is_running;
-};
+//     void (*worker)(struct qblock *, struct qblock *);
+//     atomic_bool  is_running;
+// };
 
 int ccreate_socket(
     struct socket_md *smd,
@@ -73,17 +72,17 @@ void run_client(
     struct queue *qwrite
 );
 
-void cstate_init(
-    struct socket_md *sock,
-    struct c_state *state,
-    void (*worker)(struct qblock *, struct qblock *)
-);
+// void cstate_init(
+//     struct socket_md *sock,
+//     struct c_state *state,
+//     void (*worker)(struct qblock *, struct qblock *)
+// );
 
-void cstate_run(
-    struct socket_md *md,
-    struct c_state *state
-);
+// void cstate_run(
+//     struct socket_md *md,
+//     struct c_state *state
+// );
 
-void cstate_free(struct c_state *state);
+// void cstate_free(struct c_state *state);
 
-int __worker(void *_args);
+// int __worker(void *_args);

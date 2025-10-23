@@ -34,6 +34,8 @@ void qblock_copy(struct qblock *dest, const struct qblock *src){
     qblock_free(dest);
     
     if (src->data == NULL || src->dsize == 0){
+        dest->data = NULL;
+        dest->dsize = 0;
         return;
     }
     
@@ -135,4 +137,22 @@ void queue_free(struct queue *q){
     free(q->blocks);
     q->blocks = NULL;
     q->bsize = 0;
+}
+
+bool queue_forward(struct queue *to, struct queue *from, bool peek){
+    if (queue_empty(from))
+        return false;
+
+    struct qblock block;
+    qblock_init(&block);
+    if (peek){
+        peek_block(from, &block);
+        push_block(to, &block);
+    } else {
+        pop_block(from, &block);
+        push_block(to, &block);   
+    }
+    qblock_free(&block);
+
+    return true;
 }

@@ -46,6 +46,11 @@ void __future_init(
 
 void __future_free(struct future *fut){
     fut->pool      = NULL;
+    fut->shared_is_ready = NULL;
+    fut->shared_cond_mtx = NULL;
+    fut->shared_is_done = NULL;
+    fut->shared_done = NULL;
+    
     qblock_free(&fut->out_block);
     qblock_free(&fut->inp_block);
     mtx_destroy(&fut->cond_mtx);

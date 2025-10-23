@@ -151,9 +151,15 @@ Future *async_create(
 void *await(Future *fut){
     struct qblock out;
     await_future(fut, &out);
-    free(fut);
+    if (out.dsize != sizeof(void*) || out.data == NULL) {
+        qblock_free(&out);
+        return NULL;
+    }
 
-    return out.data;
+    void *result;
+    memcpy(&result, out.data, sizeof(void*));
+    qblock_free(&out);
+    return result;
 }
 
 void __loop_worker(
@@ -243,6 +249,7 @@ void loop_run(
 void loop_stop(
     struct ev_loop *loop
 ){
+    atomic_store(&loop->working_pool.is_active, false);
     thrd_join(loop->events_thread, NULL);
     mtx_destroy(&loop->events_mtx);
     pool_free(&loop->working_pool);

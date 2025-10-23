@@ -43,6 +43,8 @@ bool attp_msg_deserial(
     struct attp_message *msg
 ){
     if (qb->dsize < sizeof(size_t) * 3){
+        msg->data.data = NULL;
+        msg->data.dsize = 0;
         fprintf(stderr, "dsize (%zu) < 24\n", qb->dsize);
         return false;
     }

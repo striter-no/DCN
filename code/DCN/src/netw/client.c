@@ -101,7 +101,7 @@ void run_client(
     size_t alr_wr = 0;
     printf("starting main loop\n");
     while (atomic_load(is_running)){
-        int pret = poll(fds, 1, -1);
+        int pret = poll(fds, 1, 100);
         if (pret == -1){
             fprintf(stderr, "[main][error] poll returned -1: %s", strerror(errno));
             atomic_store(is_running, false);
@@ -138,63 +138,61 @@ void run_client(
     }
 }
 
-int __worker(void *_args){
-    struct worker_args *args = _args;
+// int __worker(void *_args){
+//     struct worker_args *args = _args;
 
-    printf("worker started\n");
-    while (atomic_load(args->is_running)){
-        struct qblock block, oblock;
-        qblock_init(&block);
-        qblock_init(&oblock);
-        if (1 == pop_block(args->qr, &block))
-            continue;
+//     while (atomic_load(args->is_running)){
+//         struct qblock block, oblock;
+//         qblock_init(&block);
+//         qblock_init(&oblock);
+//         if (1 == pop_block(args->qr, &block))
+//             continue;
 
-        printf("calling...\n");
-        args->worker_fn(&block, &oblock);
+//         args->worker_fn(&block, &oblock);
         
-        if (oblock.data != NULL){
-            push_block(args->qw, &oblock);
-            qblock_free(&oblock);
-        }
-        qblock_free(&block);
-    }
+//         if (oblock.data != NULL){
+//             push_block(args->qw, &oblock);
+//             qblock_free(&oblock);
+//         }
+//         qblock_free(&block);
+//     }
 
-    return thrd_success;
-}
+//     return thrd_success;
+// }
 
-void cstate_init(
-    struct socket_md *sock,
-    struct c_state *state,
-    void (*worker)(struct qblock *, struct qblock *)
-){
-    state->is_running = true;
-    state->sock = sock;
-    state->worker = worker;
+// void cstate_init(
+//     struct socket_md *sock,
+//     struct c_state *state,
+//     void (*worker)(struct qblock *, struct qblock *)
+// ){
+//     state->is_running = true;
+//     state->sock = sock;
+//     state->worker = worker;
 
-    queue_init(&state->qwrite);
-    queue_init(&state->qread);
-}
+//     queue_init(&state->qwrite);
+//     queue_init(&state->qread);
+// }
 
-void cstate_run(
-    struct socket_md *md,
-    struct c_state *state
-){
-    thrd_create(&state->_wthread, __worker, &(struct worker_args){
-        .qr = &state->qread,
-        .qw = &state->qwrite,
-        .is_running = &state->is_running,
-        .worker_fn = state->worker
-    });
+// void cstate_run(
+//     struct socket_md *md,
+//     struct c_state *state
+// ){
+//     thrd_create(&state->_wthread, __worker, &(struct worker_args){
+//         .qr = &state->qread,
+//         .qw = &state->qwrite,
+//         .is_running = &state->is_running,
+//         .worker_fn = state->worker
+//     });
 
-    run_client(md, &state->is_running, &state->qread, &state->qwrite);
-}
+//     run_client(md, &state->is_running, &state->qread, &state->qwrite);
+// }
 
-void cstate_free(
-    struct c_state *state
-){
-    atomic_store(&state->is_running, false);
-    thrd_join(state->_wthread, NULL);
+// void cstate_free(
+//     struct c_state *state
+// ){
+//     atomic_store(&state->is_running, false);
+//     thrd_join(state->_wthread, NULL);
 
-    queue_free(&state->qread);
-    queue_free(&state->qwrite);
-}
+//     queue_free(&state->qread);
+//     queue_free(&state->qwrite);
+// }

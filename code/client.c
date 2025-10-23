@@ -1,19 +1,9 @@
-#include <attp/proto.h>
-#include <netw/client.h>
+#include <attp/client.h>
+#include <asyncio.h>
 #include <queue.h>
 
-void worker(struct qblock *inp, struct qblock *out){
-    struct attp_message msg;
-    if(!attp_msg_deserial(inp, &msg)){
-        fprintf(stderr, "error: cannot deserialize message\n");
-        return;
-    }
-    
-    printf("got from server: %s\n", msg.data.data);
-    attp_free_msg(&msg);
-}
-
 int main(){
+    struct ev_loop loop;
     struct socket_md md;
     ccreate_socket(&md, "127.0.0.1", 9000);
     if (connect_to(&md) != 0){
@@ -21,23 +11,43 @@ int main(){
         return -1;
     }
 
-    struct c_state state; 
-    cstate_init(&md, &state, worker);
+    loop_create(&loop, 2);
+    loop_run(&loop);
 
-    struct qblock block;
     struct attp_message msg;
-    msg.uid = 1234;
-    msg.from_uid = 5678;
     qblock_init(&msg.data);
     qblock_fill(&msg.data, "Hello", 6);
     
-    attp_msg_copy(&msg, &block);
-    push_block(&state.qwrite, &block);
-    qblock_free(&block);
-    attp_free_msg(&msg);
+    printf("initializing session...\n");
+    struct attp_session session;
+    attp_new_session(
+        &session, 
+        &loop, 
+        &md, 456
+    );
+        printf("sending request\n");
+        Future *resp = attp_request(&session, &msg);
+        attp_free_msg(&msg);
+
+        printf("starting to await future\n");
+        struct attp_message *rmsg = (
+            struct attp_message *
+        ) await(resp);
+
+        printf("got from server: %s\n", rmsg->data.data);
+        
+        attp_free_msg(rmsg); // hooray
+        free(rmsg);
+        free(resp);
+        
+        printf("ending session...\n");
     
-    cstate_run(&md, &state);
-    cstate_free(&state);
+    attp_end_session(&session);
+    
+    
+    
+    loop_stop(&loop);
     close(md.fd);
     
+    printf("end\n");
 }
