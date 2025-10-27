@@ -13,12 +13,12 @@
 #include <string.h>
 
 #include <queue.h>
-#include <thr-pool.h>
+#include <asyncio.h>
 
 #define MAX_BUFFER_SIZE 1024
 
 struct worker_args {
-    atomic_bool *is_running;
+    void *state_holder;
     struct queue *qr; // read from
     struct queue *qw; // push to
 };
@@ -31,16 +31,6 @@ struct socket_md {
     char ip[20];
     unsigned short port;
 };
-
-// struct c_state {
-//     struct socket_md *sock;
-//     struct queue qread;
-//     struct queue qwrite;
-//     thrd_t _wthread;
-    
-//     void (*worker)(struct qblock *, struct qblock *);
-//     atomic_bool  is_running;
-// };
 
 int ccreate_socket(
     struct socket_md *smd,
@@ -60,6 +50,7 @@ int cfull_write(
 );
 
 int cfull_read(
+    struct allocator *allc,
     struct socket_md *md,
     char   **data,
     size_t *read_sz
@@ -68,21 +59,9 @@ int cfull_read(
 void run_client(
     struct socket_md *md,
     atomic_bool *is_running,
+    struct ev_loop *loop,
+    void *(*on_message)(void*),
     struct queue *qread, 
-    struct queue *qwrite
+    struct queue *qwrite,
+    void *state_holder
 );
-
-// void cstate_init(
-//     struct socket_md *sock,
-//     struct c_state *state,
-//     void (*worker)(struct qblock *, struct qblock *)
-// );
-
-// void cstate_run(
-//     struct socket_md *md,
-//     struct c_state *state
-// );
-
-// void cstate_free(struct c_state *state);
-
-// int __worker(void *_args);

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 reset
 
-    # --exit-on-first-error=yes \
 valgrind \
+    --exit-on-first-error=yes \
     --leak-check=full \
     --show-leak-kinds=all \
     --track-origins=yes \

@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#include <thr-pool.h>
+#include <asyncio.h>
 #include <queue.h>
 
 #include <fcntl.h>
@@ -22,7 +22,7 @@ struct client {
     struct queue write_q;
     
     size_t alr_written;
-    size_t uid;
+    size_t intr_uid;
 
     char ip[20];
     unsigned short port;
@@ -73,6 +73,7 @@ int sfull_write(
 );
 
 int accept_client(
+    struct allocator *allc,
     struct socket_md *serv_md,
     int epfd,
     struct socket_md *cli_md,
@@ -82,9 +83,11 @@ int accept_client(
 int close_client(int epfd, struct client *cli);
 
 int run_server(
+    struct allocator *allc,
     struct socket_md *server,
-    struct pool *worker_pool,
+    struct ev_loop   *loop,
     atomic_bool *is_running,
+    void *(*async_worker)(void *),
     void (*custom_acceptor)(struct client *cli, void *state_holder),
     void (*custom_disconnector)(struct client *cli, void *state_holder),
     void *state_holder

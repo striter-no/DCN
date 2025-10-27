@@ -3,10 +3,12 @@
 #include <threads.h>
 
 void __coroutine_init(
+    struct allocator *allc,
     struct coroutine *crt,
     void *(*worker)(void *args),
     void *args
 ){
+    crt->allc = allc;
     crt->args = args;
     crt->worker = worker;
     crt->cnd_mtx = malloc(sizeof(mtx_t));
@@ -64,10 +66,50 @@ void __event_init(
 }
 
 void __event_free(struct asyncio_event *event){
-    qblock_free(&event->data);
+    qblock_free(event->looop->allc, &event->data);
     event->trigger.func = NULL;
     event->looop = NULL;
     event->uid = 0;
+}
+
+void waiter_init(
+    struct allocator *allc,
+    struct waiter *wt
+){
+    wt->is_ready = false;
+    wt->cmtx = alc_malloc(allc, sizeof(mtx_t));
+    wt->wcond = alc_malloc(allc, sizeof(cnd_t));
+    mtx_init(wt->cmtx, mtx_recursive);
+    cnd_init(wt->wcond);
+}
+
+void waiter_wait(
+    struct waiter *wt
+){
+    mtx_lock(wt->cmtx);
+    while (!atomic_load(&wt->is_ready)){
+        cnd_wait(wt->wcond, wt->cmtx);
+    }
+    mtx_unlock(wt->cmtx);
+}
+
+void waiter_free(
+    struct allocator *allc,
+    struct waiter *wt
+){
+    mtx_destroy(wt->cmtx);
+    cnd_destroy(wt->wcond);
+    alc_free(allc, wt->cmtx);
+    alc_free(allc, wt->wcond);
+    wt->cmtx  = NULL;
+    wt->wcond = NULL;
+}
+
+void waiter_set(
+    struct waiter *wt
+){
+    atomic_store(&wt->is_ready, true);
+    cnd_broadcast(wt->wcond);
 }
 
 ullong asyncio_create_event(
@@ -135,9 +177,9 @@ Future *async_create(
     void *args
 ){
     struct coroutine *crt = malloc(sizeof(struct coroutine));
-    __coroutine_init(crt, worker, args);
+    __coroutine_init(loop->allc, crt, worker, args);
 
-    Future *fut = malloc(sizeof(Future));
+    Future *fut = alc_malloc(loop->allc, sizeof(Future));
     gnr_pool_sumbit(
         &loop->working_pool, 
         &crt, 
@@ -152,13 +194,13 @@ void *await(Future *fut){
     struct qblock out;
     await_future(fut, &out);
     if (out.dsize != sizeof(void*) || out.data == NULL) {
-        qblock_free(&out);
+        qblock_free(fut->pool->allc, &out);
         return NULL;
     }
 
     void *result;
     memcpy(&result, out.data, sizeof(void*));
-    qblock_free(&out);
+    qblock_free(fut->pool->allc, &out);
     return result;
 }
 
@@ -171,7 +213,7 @@ void __loop_worker(
     void *result = crt->worker(crt->args);
 
     if (result != NULL)
-        generic_qbfill(out, result, sizeof(void *));
+        generic_qbfill(crt->allc, out, result, sizeof(void *));
 
     __coroutine_free(crt);
     free(crt);
@@ -221,12 +263,21 @@ int __events_worker(void *_args){
 }
 
 void loop_create(
+    struct allocator *allc,
     struct ev_loop *loop,
     ssize_t cores
 ){
     mtx_init(&loop->events_mtx, mtx_plain);
-    pool_init(&loop->working_pool, __loop_worker, cores == -1 ? (sysconf(_SC_NPROCESSORS_ONLN) * 2): cores);
+    loop->allc = allc;
     loop->g_euid = 1;
+    
+    pool_init(
+        allc,
+        &loop->working_pool, 
+        __loop_worker, 
+        cores == -1 ? (sysconf(_SC_NPROCESSORS_ONLN) * 2): cores
+    );
+    
     map_init(
         &loop->workers, 
         sizeof(ullong), 
@@ -276,6 +327,7 @@ void loop_stop(
     
     map_free(&loop->workers);
     map_free(&loop->events);
+    loop->allc = NULL;
 }
 
 // ================= ASYNC SUPPORTIVE FUNCTIONS =====================

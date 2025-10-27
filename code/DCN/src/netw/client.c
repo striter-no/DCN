@@ -57,6 +57,7 @@ int cfull_write(
 }
 
 int cfull_read(
+    struct allocator *allc,
     struct socket_md *md,
     char   **data,
     size_t *read_sz
@@ -75,7 +76,7 @@ int cfull_read(
         if (ar == 0)
             return 2;
 
-        char *lcopy = realloc(*data, (*read_sz) + ar);
+        char *lcopy = alc_realloc(allc, *data, (*read_sz) + ar);
         if (lcopy == NULL)
             return -2;
         memcpy(lcopy + (*read_sz), buffer, ar);
@@ -90,9 +91,18 @@ int cfull_read(
 void run_client(
     struct socket_md *md,
     atomic_bool *is_running,
+    struct ev_loop *loop,
+    void *(*on_message)(void*),
     struct queue *qread, 
-    struct queue *qwrite
+    struct queue *qwrite,
+    void *state_holder
 ){
+    struct worker_args args = {
+        .state_holder = state_holder,
+        .qr = qread,
+        .qw = qwrite
+    };
+
     struct pollfd fds[1] = {(struct pollfd){
         .events = POLLIN | POLLOUT,
         .fd = md->fd
@@ -115,7 +125,7 @@ void run_client(
                 #endif
                 struct qblock block;
                 qblock_init(&block);
-                int rstat = cfull_read(md, &block.data, &block.dsize);
+                int rstat = cfull_read(qread->allc, md, &block.data, &block.dsize);
                 if (rstat == 2){
                     atomic_store(is_running, false);
                     break;
@@ -124,7 +134,9 @@ void run_client(
                 printf("just read (%zu bytes): %s\n", block.dsize, block.data);
                 #endif
                 push_block(qread, &block);
-                qblock_free(&block);
+                qblock_free(qread->allc, &block);
+
+                async_create(loop, on_message, &args);
             } else if (fds[0].revents & POLLOUT){
                 if (!queue_empty(qwrite)){
                     struct qblock block;
@@ -139,7 +151,7 @@ void run_client(
                         alr_wr = 0;
                     }
 
-                    qblock_free(&block);
+                    qblock_free(qwrite->allc, &block);
                 }
             }
         }

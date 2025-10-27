@@ -7,12 +7,14 @@
 #include <thr-pool.h>
 #include <threads.h>
 #include <unistd.h>
+#include <allocator.h>
 
 typedef struct future Future;
 #define asyncdef void *
 typedef unsigned long long ullong;
 
 struct coroutine {
+    struct allocator *allc;
     void *args;
     void *(*worker)(void *args);
 
@@ -31,6 +33,7 @@ struct __workers_strct {
 };
 
 struct ev_loop {
+    struct allocator *allc;
     atomic_ullong g_euid;
     struct pool working_pool;
 
@@ -52,6 +55,30 @@ struct asyncio_event {
 
     struct function    trigger;
 };
+
+struct waiter {
+    atomic_bool is_ready;
+    mtx_t *cmtx;
+    cnd_t *wcond;
+};
+
+void waiter_init(
+    struct allocator *allc,
+    struct waiter *wt
+);
+
+void waiter_wait(
+    struct waiter *wt
+);
+
+void waiter_free(
+    struct allocator *allc,
+    struct waiter *wt
+);
+
+void waiter_set(
+    struct waiter *wt
+);
 
 void __workers_strct_init(
     struct __workers_strct *strc
@@ -82,6 +109,7 @@ void asyncio_remevent(
 );
 
 void __coroutine_init(
+    struct allocator *allc,
     struct coroutine *crt,
     void *(*worker)(void *args),
     void *args
@@ -104,7 +132,7 @@ void __loop_worker(
     struct qblock *out
 );
 
-void loop_create(struct ev_loop *loop, ssize_t cores);
+void loop_create(struct allocator *allc, struct ev_loop *loop, ssize_t cores);
 void loop_run(struct ev_loop *loop);
 void loop_stop(struct ev_loop *loop);
 

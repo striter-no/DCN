@@ -3,27 +3,6 @@
 #include <thr-pool.h>
 #include <threads.h>
 
-void __presence_init(
-    struct presence *prs, 
-    struct pool   *pool, 
-    struct qblock *inp
-){
-    mtx_init(&prs->cond_mtx, mtx_plain);
-    cnd_init(&prs->is_done);
-    prs->pool = pool;
-    qblock_init(&prs->inp_block);
-
-    qblock_copy(&prs->inp_block, inp);
-    atomic_store(&prs->is_ready, false);
-}
-
-void __presence_free(struct presence *prs){
-    prs->pool      = NULL;
-    qblock_free(&prs->inp_block);
-    mtx_destroy(&prs->cond_mtx);
-    cnd_destroy(&prs->is_done);
-}
-
 void __future_init(
     struct future *fut, 
     struct pool   *pool, 
@@ -35,7 +14,7 @@ void __future_init(
     qblock_init(&fut->inp_block);
     qblock_init(&fut->out_block);
 
-    qblock_copy(&fut->inp_block, inp);
+    qblock_copy(pool->allc, &fut->inp_block, inp);
     atomic_store(&fut->is_ready, false);
 
     fut->shared_is_ready = NULL;
@@ -45,25 +24,32 @@ void __future_init(
 }
 
 void __future_free(struct future *fut){
+    struct allocator *allc = fut->pool->allc;
     fut->pool      = NULL;
     fut->shared_is_ready = NULL;
     fut->shared_cond_mtx = NULL;
     fut->shared_is_done = NULL;
     fut->shared_done = NULL;
     
-    qblock_free(&fut->out_block);
-    qblock_free(&fut->inp_block);
+    qblock_free(allc, &fut->out_block);
+    qblock_free(allc, &fut->inp_block);
     mtx_destroy(&fut->cond_mtx);
     cnd_destroy(&fut->is_done);
 }
 
-void pool_init(struct pool *pool, void (*working_f)(struct qblock *inp, struct qblock *out), size_t workers){
+void pool_init(
+    struct allocator *allc,
+    struct pool *pool, 
+    void (*working_f)(struct qblock *inp, struct qblock *out), 
+    size_t workers
+){
+    pool->allc = allc;
     pool->threads = malloc(sizeof(thrd_t) * workers);
     pool->workers = workers;
     pool->working_f = working_f;
 
     cnd_init(&pool->has_tasks);
-    queue_init(&pool->q);
+    queue_init(&pool->q, allc);
     atomic_store(&pool->is_active, true);
 }
 
@@ -90,23 +76,23 @@ void pool_sumbit(struct pool *pool, struct qblock *inp, void *awaitable){
         task.is_future = false;
         task.tsk = malloc(sizeof(struct qblock));
         qblock_init(task.tsk);
-        qblock_copy(task.tsk, inp);
+        qblock_copy(pool->allc, task.tsk, inp);
     }
     qblock_init(&block);
-    generic_qbfill(&block, &task, sizeof(struct task));
+    generic_qbfill(pool->allc, &block, &task, sizeof(struct task));
 
     push_block(&pool->q, &block);
-    qblock_free(&block);
+    qblock_free(pool->allc, &block);
     cnd_signal(&pool->has_tasks);
 }
 
 void gnr_pool_sumbit(struct pool *pool, void *data, size_t sz, struct future *fut){
     struct qblock b;
     qblock_init(&b);
-    generic_qbfill(&b, data, sz);
+    generic_qbfill(pool->allc, &b, data, sz);
 
     pool_sumbit(pool, &b, fut);
-    qblock_free(&b);
+    qblock_free(pool->allc, &b);
 }
 
 int __thr_work(void *_args){
@@ -130,7 +116,7 @@ int __thr_work(void *_args){
         pop_block(&pool->q, &block);
         
         generic_qbout(&block, &task, sizeof(struct task));
-        qblock_free(&block);
+        qblock_free(pool->allc, &block);
         mtx_unlock(&pool->q.blocks_mtx);
         
         if (task.is_future){
@@ -149,7 +135,7 @@ int __thr_work(void *_args){
         } else {
             struct qblock *inp = task.tsk;
             pool->working_f(inp, NULL);
-            qblock_free(inp);
+            qblock_free(pool->allc, inp);
         }
     }
 
@@ -171,6 +157,6 @@ void await_future(struct future *fut, struct qblock *out){
     mtx_unlock(&(fut->cond_mtx));
     
     qblock_init(out);
-    qblock_copy(out, &(fut->out_block));
+    qblock_copy(fut->pool->allc, out, &(fut->out_block));
     __future_free(fut);
 }

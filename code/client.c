@@ -1,9 +1,17 @@
-#include <attp/client.h>
+#include "DCN/include/dnet/general.h"
 #include <asyncio.h>
-#include <queue.h>
+#include <allocator.h>
+#include <dnet/client.h>
 
 int main(){
+    printf("entry\n");
     struct ev_loop loop;
+    struct allocator allc;
+    allocator_init(&allc);
+
+    struct dcn_client client;
+    struct dcn_session session;
+
     struct socket_md md;
     ccreate_socket(&md, "127.0.0.1", 9000);
     if (connect_to(&md) != 0){
@@ -11,34 +19,44 @@ int main(){
         return -1;
     }
 
-    loop_create(&loop, 2);
+    printf("loop creation\n");
+    loop_create(&allc, &loop, 3);
     loop_run(&loop);
 
-    struct attp_message msg;
-    qblock_init(&msg.data);
-    qblock_fill(&msg.data, "Hello", 6);
-    
-    struct attp_session session;
-    attp_new_session(
-        &session, 
-        &loop, 
-        &md, 456
-    );
-        Future *resp = attp_request(&session, &msg);
-        attp_free_msg(&msg);
+    printf("dcn creation\n");
+    dcn_cli_init(&allc, &client, &loop, &md);
+    dcn_new_session(&session, &client, 456);
+    dcn_cli_run(&session);
+    {
+        printf("packet creation\n");
+        struct packet pack;
+        packet_templ(
+            &allc, &pack, 
+            "Hello", 6
+        );
 
-        struct attp_message *rmsg = (
-            struct attp_message *
-        ) await(resp);
+        printf("sending request\n");
+        struct waiter *waiter = NULL;
+        ullong resp_n = dcn_request(&session, &pack, 123, &waiter);
 
-        printf("got from server: %s\n", rmsg->data.data);
+        printf("waiting for response\n");
+        wait_response(&session, waiter, resp_n);    
+
+        printf("got response\n");
+
+        struct packet answer;
+        dcn_getresp(&session, resp_n, &answer);
+        printf("%s\n", answer.data.data);
         
-        attp_free_msg(rmsg); // hooray
-        free(rmsg);
-        free(resp);
-    
-    attp_end_session(&session);
-    
-    loop_stop(&loop);
+        packet_free(&allc, &answer);
+    }
+
+    printf("ending session\n");
+    dcn_end_session(&session);
     close(md.fd);
+
+    printf("ending loop and allocator\n");
+    loop_stop(&loop);
+    allocator_end(&allc);
+    printf("end\n");
 }

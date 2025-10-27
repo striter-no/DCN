@@ -5,9 +5,10 @@
 #include <stdatomic.h>
 #include <unistd.h>
 #include "queue.h"
-
+#include <allocator.h>
 
 struct pool {
+    struct allocator *allc;
     void (*working_f)(struct qblock *inp, struct qblock *out);
 
     cnd_t has_tasks;
@@ -34,15 +35,6 @@ struct future {
     atomic_size_t *shared_done;
 };
 
-struct presence {
-    struct pool   *pool;
-    struct qblock inp_block;
-
-    atomic_bool is_ready;
-    mtx_t    cond_mtx;
-    cnd_t    is_done;
-};
-
 struct task {
     bool is_future;
     void *tsk;
@@ -55,15 +47,9 @@ void __future_init(
     struct qblock *inp
 );
 void __future_free(struct future *fut);
-void __presence_init(
-    struct presence *fut, 
-    struct pool   *pool, 
-    struct qblock *inp
-);
-void __presence_free(struct presence *fut);
-
 
 void pool_init(
+    struct allocator *allc,
     struct pool *pool, 
     void (*working_f)(struct qblock *inp, struct qblock *out), 
     size_t workers

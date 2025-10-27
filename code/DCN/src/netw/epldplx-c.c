@@ -131,6 +131,7 @@ int sfull_write(
 }
 
 int accept_client(
+    struct allocator *allc,
     struct socket_md *serv_md,
     int epfd,
     struct socket_md *cli_md,
@@ -153,11 +154,11 @@ int accept_client(
     struct client *client = malloc(sizeof(struct client));
     client->fd = cli_md->fd;
     client->alr_written = 0;
-    client->uid = ++serv_md->last_uid;
+    client->intr_uid = ++serv_md->last_uid;
     strcpy(client->ip, cli_md->ip);
     client->port = cli_md->port;
-    queue_init(&client->read_q);
-    queue_init(&client->write_q);
+    queue_init(&client->read_q, allc);
+    queue_init(&client->write_q, allc);
 
     *cli_out = client;
 
@@ -199,9 +200,11 @@ int close_client(int epfd, struct client *cli){
 }
 
 int run_server(
+    struct allocator *allc,
     struct socket_md *server,
-    struct pool *worker_pool,
+    struct ev_loop   *loop,
     atomic_bool *is_running,
+    void *(*async_worker)(void *),
     void (*custom_acceptor)(struct client *cli, void *state_holder),
     void (*custom_disconnector)(struct client *cli, void *state_holder),
     void *state_holder
@@ -228,7 +231,7 @@ int run_server(
             if (ev.data.ptr == NULL){
                 struct client *ptr = NULL;
                 struct socket_md cli_md;
-                ret = accept_client(server, epfd, &cli_md, &ptr);
+                ret = accept_client(allc, server, epfd, &cli_md, &ptr);
                 
                 if (ret != 0){
                     fprintf(stderr, "cannot accept client: %s\n", strerror(errno));
@@ -251,6 +254,7 @@ int run_server(
 
                     ret = nbep_read(cli->fd, &r_buff, &r_size);
                     if (ret == -3 || ret == -4){
+                        custom_disconnector(cli, state_holder);
                         close_client(epfd, cli);
                         continue;
                     }
@@ -258,22 +262,17 @@ int run_server(
                     if (r_size != 0){
                         struct qblock block;
                         qblock_init(&block);
-                        qblock_fill(&block, r_buff, r_size);
+                        qblock_fill(allc, &block, r_buff, r_size);
                         free(r_buff);
 
                         push_block(&cli->read_q, &block);
-                        qblock_free(&block);
+                        qblock_free(allc, &block);
 
-                        struct qblock inp;
-                        qblock_init(&inp);
-                        struct worker_task task = {
-                            .cli_ptr = cli,
-                            .state_holder = state_holder
-                        };
+                        struct worker_task *task = malloc(sizeof(struct worker_task));
+                        task->cli_ptr = cli;
+                        task->state_holder = state_holder;
 
-                        generic_qbfill(&inp, &task, sizeof(struct worker_task));
-                        pool_sumbit(worker_pool, &inp, NULL);
-                        qblock_free(&inp);
+                        async_create(loop, async_worker, task);
 
                         if( epoll_ctl(
                             epfd, EPOLL_CTL_MOD, 
@@ -320,7 +319,7 @@ int run_server(
                             }
                         }
 
-                        qblock_free(&block);
+                        qblock_free(allc, &block);
                     }
                 }
             }
