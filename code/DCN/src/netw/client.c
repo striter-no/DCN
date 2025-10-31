@@ -109,20 +109,22 @@ void run_client(
     }};
 
     size_t alr_wr = 0;
-    #ifdef DEBUGGING
+    struct qblock acc; // stream accumulator for partial/multiple packets
+    qblock_init(&acc);
+    // #ifdef DEBUGGING
     printf("starting main loop\n");
-    #endif
+    // #endif
     while (atomic_load(is_running)){
-        int pret = poll(fds, 1, 100);
+        int pret = poll(fds, 1, 10);
         if (pret == -1){
             fprintf(stderr, "[main][error] poll returned -1: %s", strerror(errno));
             atomic_store(is_running, false);
             break;
         } else if (pret > 0){
             if (fds[0].revents & POLLIN){
-                #ifdef DEBUGGING
+                // #ifdef DEBUGGING
                 printf("reading from server\n");
-                #endif
+                // #endif
                 struct qblock block;
                 qblock_init(&block);
                 int rstat = cfull_read(qread->allc, md, &block.data, &block.dsize);
@@ -130,21 +132,61 @@ void run_client(
                     atomic_store(is_running, false);
                     break;
                 }
-                #ifdef DEBUGGING
+                // #ifdef DEBUGGING
                 printf("just read (%zu bytes): %s\n", block.dsize, block.data);
-                #endif
-                push_block(qread, &block);
+                // #endif
+                // Append to accumulator
+                if (block.dsize > 0){
+                    char *newbuf = alc_realloc(qread->allc, acc.data, acc.dsize + block.dsize);
+                    if (newbuf != NULL){
+                        memcpy(newbuf + acc.dsize, block.data, block.dsize);
+                        acc.data = newbuf;
+                        acc.dsize += block.dsize;
+                    }
+                }
                 qblock_free(qread->allc, &block);
 
-                async_create(loop, on_message, &args);
+                // Try to extract as many full packets as possible
+                const size_t header_sz = sizeof(ullong)*3 + sizeof(bool)*2 + sizeof(size_t);
+                while (acc.dsize >= header_sz){
+                    size_t payload_sz = 0;
+                    memcpy(&payload_sz, acc.data + (sizeof(ullong)*3 + sizeof(bool)*2), sizeof(size_t));
+                    size_t pkt_sz = header_sz + payload_sz;
+                    if (acc.dsize < pkt_sz)
+                        break;
+
+                    struct qblock pkt;
+                    qblock_init(&pkt);
+                    pkt.data = alc_malloc(qread->allc, pkt_sz);
+                    pkt.dsize = pkt_sz;
+                    memcpy(pkt.data, acc.data, pkt_sz);
+                    push_block(qread, &pkt);
+                    qblock_free(qread->allc, &pkt);
+
+                    // remove consumed bytes from accumulator
+                    size_t remain = acc.dsize - pkt_sz;
+                    if (remain > 0)
+                        memmove(acc.data, acc.data + pkt_sz, remain);
+                    acc.dsize = remain;
+                    if (remain == 0){
+                        alc_free(qread->allc, acc.data);
+                        acc.data = NULL;
+                    } else {
+                        char *shr = alc_realloc(qread->allc, acc.data, remain);
+                        if (shr != NULL) acc.data = shr;
+                    }
+
+                    // schedule message handler for each packet
+                    async_create(loop, on_message, &args);
+                }
             } else if (fds[0].revents & POLLOUT){
                 if (!queue_empty(qwrite)){
                     struct qblock block;
                     qblock_init(&block);
                     peek_block(qwrite, &block);
-                    #ifdef DEBUGGING
-                    printf("writing to the server: %s\n", block.data);
-                    #endif
+                    // #ifdef DEBUGGING
+                    printf("writing to the server (%zu bytes): %s\n", block.dsize, block.data);
+                    // #endif
 
                     if (cfull_write(md, block.data, block.dsize, &alr_wr) == 0){
                         pop_block(qwrite, NULL);   
@@ -152,10 +194,14 @@ void run_client(
                     }
 
                     qblock_free(qwrite->allc, &block);
+                } else {
+                    // printf("nothing to read/write\n");
                 }
             }
         }
     }
+
+    printf("run_client: ended\n");
 }
 
 // int __worker(void *_args){

@@ -50,7 +50,10 @@ struct dcn_server {
     struct ev_loop   *loop;
     struct socket_md *md;
 
+    // sizeof(ullong): sizeof(struct client *)
     struct map dcn_clients;
+    // sizeof(ullong): sizeof(ullong)
+    struct map dcn_sessions;
 };
 
 void dcn_serv_init(

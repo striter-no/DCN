@@ -163,7 +163,7 @@ int accept_client(
     *cli_out = client;
 
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, cli_md->fd, &(struct epoll_event){
-        .events = EPOLLIN,
+        .events = EPOLLIN | EPOLLOUT,
         .data.ptr = client
     }) < 0){
         close(client->fd);
@@ -180,6 +180,7 @@ int accept_client(
 }
 
 int close_client(int epfd, struct client *cli){
+    printf("[DEBUG] Closing client fd=%d, ip=%s, port=%d\n", cli->fd, cli->ip, cli->port);
     if (!cli) return 1;
 
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, cli->fd, NULL) < 0){
@@ -274,53 +275,60 @@ int run_server(
 
                         async_create(loop, async_worker, task);
 
-                        if( epoll_ctl(
-                            epfd, EPOLL_CTL_MOD, 
-                            cli->fd, &(struct epoll_event){
-                                .events = EPOLLIN | EPOLLOUT,
-                                .data.ptr = cli
-                            }
-                        ) < 0){
-                            atomic_store(is_running, false);
-                            fprintf(
-                                stderr, 
-                                "[epoll][error] while epollin: %s\n", strerror(errno)
-                            );
-                            break;
-                        }
+                        // if( epoll_ctl(
+                        //     epfd, EPOLL_CTL_MOD, 
+                        //     cli->fd, &(struct epoll_event){
+                        //         .events = EPOLLIN | EPOLLOUT,
+                        //         .data.ptr = cli
+                        //     }
+                        // ) < 0){
+                        //     atomic_store(is_running, false);
+                        //     fprintf(
+                        //         stderr, 
+                        //         "[epoll][error] while epollin: %s\n", strerror(errno)
+                        //     );
+                        //     break;
+                        // }
                     }
                 }
 
                 else if (ev.events & EPOLLOUT){
-                    if (queue_empty(&cli->write_q))
+                    if (queue_empty(&cli->write_q)){
+                        // printf("EPOLLOUT but write queue is empty for fd=%d\n", cli->fd);
                         continue;
+                    }
 
                     struct qblock block;
                     qblock_init(&block);
-                    
+
                     if (0 == peek_block(&cli->write_q, &block)){
+                        printf(">epldplx: writing to %s:%i (%i fd)\n", cli->ip, cli->port, cli->fd);
+                        
                         ret = sfull_write(cli, block.data, block.dsize);
                         if (ret == 0){
                             cli->alr_written = 0;
                             //  2 == no blocks left
-                            if (2 == pop_block(&cli->write_q, NULL) && epoll_ctl(
-                                epfd, EPOLL_CTL_MOD, 
-                                cli->fd, &(struct epoll_event){
-                                    .events = EPOLLIN,
-                                    .data.ptr = cli
-                                }
-                            ) < 0){
-                                atomic_store(is_running, false);
-                                fprintf(
-                                    stderr, 
-                                    "[epoll][error] while epollout/full write: %s\n", strerror(errno)
-                                );
-                                break;
-                            }
+                            // if (2 == pop_block(&cli->write_q, NULL) && epoll_ctl(
+                            //     epfd, EPOLL_CTL_MOD, 
+                            //     cli->fd, &(struct epoll_event){
+                            //         .events = EPOLLIN,
+                            //         .data.ptr = cli
+                            //     }
+                            // ) < 0){
+                            //     atomic_store(is_running, false);
+                            //     fprintf(
+                            //         stderr, 
+                            //         "[epoll][error] while epollout/full write: %s\n", strerror(errno)
+                            //     );
+                            //     break;
+                            // }
+                            pop_block(&cli->write_q, NULL);
                         }
 
                         qblock_free(allc, &block);
                     }
+                } else if (!queue_empty(&cli->write_q)){
+                    printf(">epldplx: no epollout on %s:%i (%i fd) while WRITEQ is not empty\n", cli->ip, cli->port, cli->fd);
                 }
             }
         }

@@ -8,7 +8,7 @@ fi
 
 EXEC_NAME=$1
 CC=${2:-gcc}
-CFLAGS="-pedantic -Wall -Wextra -g " # -fsanitize=address
+CFLAGS="-pedantic -Wall -Wextra -g" # -fsanitize=address
 CINCL="./code/DCN/include"
 CLIB="./code/DCN/lib"
 LIBS="-lm"

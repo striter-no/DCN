@@ -192,15 +192,20 @@ Future *async_create(
 
 void *await(Future *fut){
     struct qblock out;
+    // save allocator before await_future frees fut (sets fut->pool to NULL)
+    struct allocator *allc = fut->pool->allc;
     await_future(fut, &out);
+    
     if (out.dsize != sizeof(void*) || out.data == NULL) {
-        qblock_free(fut->pool->allc, &out);
+        qblock_free(allc, &out);
         return NULL;
     }
-
+    
     void *result;
     memcpy(&result, out.data, sizeof(void*));
-    qblock_free(fut->pool->allc, &out);
+    printf("in await result: %p\n", result);
+
+    qblock_free(allc, &out);
     return result;
 }
 
@@ -212,8 +217,10 @@ void __loop_worker(
     generic_qbout(inp, &crt, sizeof(struct coroutine *));
     void *result = crt->worker(crt->args);
 
-    if (result != NULL)
-        generic_qbfill(crt->allc, out, result, sizeof(void *));
+    if (result != NULL){
+        generic_qbfill(crt->allc, out, &result, sizeof(void *));
+        printf("filling out %p\n", result);
+    }
 
     __coroutine_free(crt);
     free(crt);
@@ -300,6 +307,7 @@ void loop_run(
 void loop_stop(
     struct ev_loop *loop
 ){
+    printf("loop_stop\n");
     atomic_store(&loop->working_pool.is_active, false);
     thrd_join(loop->events_thread, NULL);
     mtx_destroy(&loop->events_mtx);

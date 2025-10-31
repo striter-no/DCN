@@ -13,6 +13,7 @@ void hash_table_resize(struct allocator *allc, size_t new_capacity) {
     allc->buckets = calloc(new_capacity, sizeof(struct bucket*));
     if (allc->buckets == NULL) {
         allc->buckets = old_buckets;
+        mtx_unlock(&allc->_mtx);
         return;
     }
 

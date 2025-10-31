@@ -7,6 +7,9 @@ struct packet {
     ullong from_uid;
     ullong to_uid;
     ullong muid;
+    bool   is_request; // or answer if false
+
+    bool   from_os;
 };
 
 void packet_serial(
@@ -56,4 +59,14 @@ void packet_templ(
     struct allocator *allc,
     struct packet *pack,
     char *data, size_t sz
+);
+
+struct packet *copy_packet(
+    struct allocator *allc, 
+    const struct packet *src
+);
+
+struct packet *move_packet(
+    struct allocator *allc, 
+    struct packet *src
 );
