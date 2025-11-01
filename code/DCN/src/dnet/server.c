@@ -44,8 +44,8 @@ void *dcn_async_worker(void *_args){
     qblock_free(allc, &input);
     printf(" deserial done\n");
 
-    printf(" Processing packet: from=%llu, to=%llu, muid=%llu, data_size=%zu, is_request=%i, from_os=%i\n", 
-       pack.from_uid, pack.to_uid, pack.muid, pack.data.dsize, pack.is_request, pack.from_os);
+    printf(" Processing packet: from=%llu, to=%llu, muid=%llu, data_size=%zu, packtype=%i, from_os=%i\n", 
+       pack.from_uid, pack.to_uid, pack.muid, pack.data.dsize, pack.packtype, pack.from_os);
 
     map_set(&serv->dcn_sessions, &pack.from_uid, &pack.muid);
 
@@ -101,6 +101,63 @@ void *dcn_async_worker(void *_args){
         pack.muid      // ANSWER Message UID
     );
 
+    if (pack.packtype == BROADCAST || pack.packtype == SIG_BROADCAST){
+        mtx_lock(&serv->dcn_clients._mtx);
+        size_t len = serv->dcn_clients.len;
+        mtx_unlock(&serv->dcn_clients._mtx);
+
+        for (size_t i = 0; i < len; i++){
+            ullong key; 
+            if (0 != map_key_at(&serv->dcn_clients, &key, i))
+                continue;
+
+            struct client **to_cli_ptr = NULL;
+            if (!map_at(&serv->dcn_clients, &key, (void**)&to_cli_ptr))
+                continue;
+
+            struct client *to_cli = *to_cli_ptr;
+
+            struct qblock ansblock;
+            struct packet to_cli_answer;
+            packet_init(
+                allc, &to_cli_answer,
+                pack.data.data,
+                pack.data.dsize,
+                pack.from_uid,
+                pack.to_uid,
+                0
+            );
+            to_cli_answer.from_os = true;
+            to_cli_answer.packtype = pack.packtype;
+            packet_free(allc, &pack);
+            packet_serial(
+                allc, 
+                &to_cli_answer, 
+                &ansblock
+            );
+            
+            if (to_cli->fd > 0) {
+                push_block(&to_cli->write_q, &ansblock);
+                printf(
+                    " message sent (%llu->%llu (%i fd) (#%llu) %zu bytes) | queue size: %zu\n", 
+                    to_cli_answer.from_uid, 
+                    to_cli_answer.to_uid, 
+                    to_cli->fd,
+                    to_cli_answer.muid,
+                    to_cli_answer.data.dsize,
+                    to_cli->write_q.bsize
+                );
+            } else {
+                printf(" Client %llu has invalid fd\n", to_cli_answer.to_uid);
+            }
+            
+            packet_free(allc, &to_cli_answer);
+            qblock_free(allc, &ansblock);
+        }
+
+        return NULL;
+    }
+
     if (!map_at(&serv->dcn_clients, &pack.to_uid, (void**)&to_cli_ptr)){
         printf(" %llu - no such client\n", pack.to_uid);
         printf(" answering back to sender with errc 101\n");
@@ -151,7 +208,7 @@ void *dcn_async_worker(void *_args){
         0
     );
     to_cli_answer.from_os = true;
-    to_cli_answer.is_request = pack.is_request;
+    to_cli_answer.packtype = pack.packtype;
     packet_free(allc, &pack);
     packet_serial(
         allc, 

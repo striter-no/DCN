@@ -5,6 +5,7 @@
 #include <allocator.h>
 #include <asyncio.h>
 #include <array.h>
+#include <logger.h>
 
 /*
 How it works
@@ -64,6 +65,7 @@ struct usr_waiter {
 };
 
 struct dcn_session {
+    struct logger *lgr;
     struct dcn_client *client;
     atomic_bool is_active;
 
@@ -163,7 +165,7 @@ Future* request(
     struct dcn_session *session,
     struct packet *pack,
     ullong to_uid,
-    bool is_request
+    PACKET_TYPE packtype
 );
 
 // get incoming requests from uid

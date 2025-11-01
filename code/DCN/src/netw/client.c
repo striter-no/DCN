@@ -112,7 +112,7 @@ void run_client(
     struct qblock acc; // stream accumulator for partial/multiple packets
     qblock_init(&acc);
     // #ifdef DEBUGGING
-    printf("starting main loop\n");
+    //**printf("starting main loop\n"); 
     // #endif
     while (atomic_load(is_running)){
         int pret = poll(fds, 1, 10);
@@ -123,7 +123,7 @@ void run_client(
         } else if (pret > 0){
             if (fds[0].revents & POLLIN){
                 // #ifdef DEBUGGING
-                printf("reading from server\n");
+                //**printf("reading from server\n"); 
                 // #endif
                 struct qblock block;
                 qblock_init(&block);
@@ -133,7 +133,7 @@ void run_client(
                     break;
                 }
                 // #ifdef DEBUGGING
-                printf("just read (%zu bytes): %s\n", block.dsize, block.data);
+                //**printf("just read (%zu bytes): %s\n", block.dsize, block.data); 
                 // #endif
                 // Append to accumulator
                 if (block.dsize > 0){
@@ -147,10 +147,10 @@ void run_client(
                 qblock_free(qread->allc, &block);
 
                 // Try to extract as many full packets as possible
-                const size_t header_sz = sizeof(ullong)*3 + sizeof(bool)*2 + sizeof(size_t);
+                const size_t header_sz = packet_general_ofs();
                 while (acc.dsize >= header_sz){
                     size_t payload_sz = 0;
-                    memcpy(&payload_sz, acc.data + (sizeof(ullong)*3 + sizeof(bool)*2), sizeof(size_t));
+                    memcpy(&payload_sz, acc.data + packet_general_ofs() - sizeof(size_t), sizeof(size_t));
                     size_t pkt_sz = header_sz + payload_sz;
                     if (acc.dsize < pkt_sz)
                         break;
@@ -185,7 +185,7 @@ void run_client(
                     qblock_init(&block);
                     peek_block(qwrite, &block);
                     // #ifdef DEBUGGING
-                    printf("writing to the server (%zu bytes): %s\n", block.dsize, block.data);
+                    //**printf("writing to the server (%zu bytes): %s\n", block.dsize, block.data); 
                     // #endif
 
                     if (cfull_write(md, block.data, block.dsize, &alr_wr) == 0){
@@ -201,7 +201,7 @@ void run_client(
         }
     }
 
-    printf("run_client: ended\n");
+    //**printf("run_client: ended\n"); 
 }
 
 // int __worker(void *_args){

@@ -3,7 +3,7 @@
 
 // async function in run_client (gather any responses)
 void *__dcn_on_message(void *_args){
-    printf("__dcn_on_message: started\n");
+    //**printf("__dcn_on_message: started\n");
     struct worker_args *args = _args;
     struct queue *readq = args->qr;
     struct queue *writeq = args->qw;
@@ -13,22 +13,20 @@ void *__dcn_on_message(void *_args){
     struct qblock input;
     qblock_init(&input);
     if (1 == pop_block(readq, &input)){
-        printf(" pop block - no blocks left\n");
-        printf("__dcn_on_message: exit\n");
+        fprintf(stderr,"[warning] on_message: pop block - no blocks left\n");
         return NULL;
     }
 
     struct packet *pack = alc_calloc(allc, 1, sizeof(struct packet));
     packet_deserial(allc, pack, &input);
 
-    printf("__dcn_on_message: packet received - from_uid=%llu, to_uid=%llu, muid=%llu, from_os=%d, is_request=%d, data_size=%zu\n",
-       pack->from_uid, pack->to_uid, pack->muid, pack->from_os, pack->is_request, pack->data.dsize);
+    //**printf("__dcn_on_message: packet received - from_uid=%llu, to_uid=%llu, muid=%llu, from_os=%d, packtype=%d, data_size=%zu\n",
+    //**   pack->from_uid, pack->to_uid, pack->muid, pack->from_os, pack->packtype, pack->data.dsize);
 
 
     if (pack->to_uid != session->cli_uid){
         packet_free(allc, pack);
-        printf(" packet has different session uid (%llu instead of %llu)\n", pack->to_uid, session->cli_uid);
-        printf("__dcn_on_message: exit\n");
+        fprintf(stderr, "[warning] packet has different session uid (%llu instead of %llu)\n", pack->to_uid, session->cli_uid);
         return NULL;
     }
         
@@ -36,7 +34,9 @@ void *__dcn_on_message(void *_args){
     if (pack->from_os){
         struct usr_resp *targ = NULL;
         if (map_at(&session->usr_responses, &pack->from_uid, (void**)&targ)){
-            struct queue *tq = (pack->is_request? targ->requests : targ->responses);
+            struct queue *tq = ((
+                pack->packtype != RESPONSE
+            ) ? targ->requests : targ->responses);
             struct qblock data;
             packet_serial(allc, pack, &data);
             push_block(tq, &data);
@@ -49,7 +49,7 @@ void *__dcn_on_message(void *_args){
             queue_init(loc.requests, allc);
             queue_init(loc.responses, allc);
 
-            struct queue *tq = (pack->is_request? loc.requests : loc.responses);
+            struct queue *tq = ((pack->packtype != RESPONSE)? loc.requests : loc.responses);
             struct qblock data;
             packet_serial(allc, pack, &data);
             push_block(tq, &data);
@@ -61,15 +61,15 @@ void *__dcn_on_message(void *_args){
         struct usr_waiter *waiter = NULL;
         if (map_at(&session->usr_waiters, &pack->from_uid, (void**)&waiter))
             waiter_set(
-                pack->is_request ? waiter->req_waiter : waiter->resp_waiter
+                (pack->packtype != RESPONSE) ? waiter->req_waiter : waiter->resp_waiter
             );
         
-        if (pack->is_request){
+        if (pack->packtype != RESPONSE){
             waiter_set(&session->req_waiter);
         }
 
         // freeing because its data was copied to req/resp queue
-        printf("Processing as user message with from=%llu\n", pack->from_uid);
+        printf("Processing as user message with from=%llu\n", pack->from_uid); //**
         packet_free(allc, pack);
         alc_free(allc, pack);
         return NULL;
@@ -79,14 +79,14 @@ void *__dcn_on_message(void *_args){
     
     struct waiter **waiter_ptr = NULL;
     if (map_at(&session->cnd_responses, &pack->muid, (void**)&waiter_ptr)){
-        printf(" waiter set (muid %llu)\n", pack->muid);
+        //**printf(" waiter set (muid %llu)\n", pack->muid);
         waiter_set(*waiter_ptr);
 
     } else {
-        printf(" waiter does not exists (muid %llu)\n", pack->muid);
+        fprintf(stderr, "[warning] waiter does not exists (muid %llu)\n", pack->muid);
     }
 
-    printf("__dcn_on_message: exit\n");
+    //**printf("__dcn_on_message: exit\n");
     return NULL;
 }
 
@@ -177,11 +177,11 @@ void dcn_end_session(
     struct dcn_session *session
 ){
     struct allocator *allc = session->client->allc;
-    printf("dcn_end_session: started\n");
+    //**printf("dcn_end_session: started\n");
     atomic_store(&session->is_active, false);
-    printf("dcn_end_session: is_active set to false\n");
+    //**printf("dcn_end_session: is_active set to false\n");
     thrd_join(session->runnerthr, NULL);
-    printf("dcn_end_session: runner thread joined\n");
+    //**printf("dcn_end_session: runner thread joined\n");
 
     session->last_muid = 1;
     session->cli_uid = 0;
@@ -210,7 +210,7 @@ void dcn_end_session(
     }
     map_free(&session->usr_responses);
 
-    printf("dcn_end_session: waiter free\n");
+    //**printf("dcn_end_session: waiter free\n");
 
     for (size_t i = 0; i < session->usr_waiters.len; i++){
         ullong key;
@@ -229,7 +229,7 @@ void dcn_end_session(
         alc_free(allc, val->resp_waiter);
     }
     map_free(&session->usr_waiters);
-    printf("dcn_end_session: ended\n");
+    //**printf("dcn_end_session: ended\n");
 
     waiter_free(allc, &session->req_waiter);
 }
@@ -276,7 +276,7 @@ bool dcn_getresp(
             pack->from_uid = src->from_uid;
             pack->to_uid   = src->to_uid;
             pack->from_os  = src->from_os;
-            pack->is_request = src->is_request;
+            pack->packtype = src->packtype;
             pack->muid     = src->muid;
             qblock_init(&pack->data);
             qblock_copy(session->client->allc, &pack->data, &src->data);
@@ -323,48 +323,73 @@ void *__async_req(void *_args){
     struct dcn_session *session = tsk->session;
     struct packet *pack = tsk->pack;
     struct allocator *allc = tsk->session->client->allc;
+    struct logger *lg = session->lgr;
 
-    if (!map_in(&session->usr_waiters, &pack->to_uid)){
-        struct usr_waiter waiter;
-        waiter.req_waiter = alc_malloc(allc, sizeof(struct waiter));
-        waiter.resp_waiter = alc_malloc(allc, sizeof(struct waiter));
-        waiter_init(allc, waiter.req_waiter);
-        waiter_init(allc, waiter.resp_waiter);
+    dblevel_push(lg, "__async_req");
+    dblog(lg, INFO, "request to %llu (packtype %d)", pack->to_uid, pack->packtype);
 
-        map_set(&session->usr_waiters, &pack->to_uid, &waiter);
-    }
+    if (pack->packtype != SIGNAL && pack->packtype != SIG_BROADCAST)
+        if (!map_in(&session->usr_waiters, &pack->to_uid)){
+            dblog(lg, INFO, "initing new waiter");
+            struct usr_waiter waiter;
+            waiter.req_waiter = alc_malloc(allc, sizeof(struct waiter));
+            waiter.resp_waiter = alc_malloc(allc, sizeof(struct waiter));
+            waiter_init(allc, waiter.req_waiter);
+            waiter_init(allc, waiter.resp_waiter);
 
+            map_set(&session->usr_waiters, &pack->to_uid, &waiter);
+        }
+
+    dblog(lg, INFO, "starting request cycle");
     RESP_CODE rcode;
     while (true) {
         struct packet answer;
         struct waiter *waiter = NULL;
 
+        // dblog(lg, INFO, "starting dcn_request");
         ullong resp_n = dcn_request(session, pack, pack->to_uid, &waiter);
+        // dblog(lg, INFO, "waiting for response (%llu muid)", resp_n);
         wait_response(session, waiter, resp_n);
 
+        // dblog(lg, INFO, "getting response...");
         dcn_getresp(session, resp_n, &answer, &rcode);
         if (rcode != NO_SUCH_USER){
+            dblog(lg, INFO, "got non-NO_SUCH_USER code: %d", rcode);
             packet_free(allc, &answer);
             break;
         }
 
         packet_free(allc, &answer);
     }
+
+    dblog(lg, INFO, "end of request cycle");
     
+    if (pack->packtype == SIGNAL || pack->packtype == SIG_BROADCAST){
+        dblog(lg, INFO, "packtype is sig-like, skipping response waiting");
+        dblevel_pop(lg);
+        free(tsk);
+        return NULL;
+    }
+
+    dblog(lg, INFO, "searching for waiter");
     struct usr_waiter *waiter_str = NULL;
     map_at(&session->usr_waiters, &pack->to_uid, (void**)&waiter_str);
+    dblog(lg, INFO, "waiting waiter");
     waiter_wait(waiter_str->resp_waiter);
 
     // doubtfully 
     // map_erase  (&session->usr_waiters, &pack->to_uid);
     
+    dblog(lg, INFO, "searching response");
     struct map *urs = &session->usr_responses;
     struct packet *answer_packet = alc_malloc(allc, sizeof(struct packet));
     struct usr_resp *lc_ursp = NULL;
 
     // this user (to_uid) didn't send anything (very unlikely)
     if (!map_at(urs, &tsk->pack->to_uid, (void**)&lc_ursp )){
+        dblog(lg, ERROR, "searching response failed! (uid unregistered)");
         alc_free(allc, answer_packet);
+        dblevel_pop(lg);
         free(tsk);
         return NULL;
     }
@@ -374,14 +399,18 @@ void *__async_req(void *_args){
 
     // no blocks in responses queue (very unlikely)
     if (1 == pop_block(lc_ursp->responses, &resp_block)){
+        dblog(lg, ERROR, "no responses (queue is empty)");
         alc_free(allc, answer_packet);
+        dblevel_pop(lg);
         free(tsk);
         return NULL;
     }
 
+    dblog(lg, INFO, "deserializing packet");
     packet_deserial(allc, answer_packet, &resp_block);
     qblock_free(lc_ursp->responses->allc, &resp_block);
 
+    dblevel_pop(lg);
     free(tsk);
     return (void*)answer_packet;
 }
@@ -391,13 +420,13 @@ Future* request(
     struct dcn_session *session,
     struct packet *pack,
     ullong to_uid,
-    bool is_request
+    PACKET_TYPE packtype
 ){
     pack->from_uid = session->cli_uid;
     pack->from_os  = false;
     pack->to_uid   = to_uid;
     pack->muid     = 0;
-    pack->is_request = is_request;
+    pack->packtype = packtype;
 
     struct dcn_task *tsk = malloc(sizeof(struct dcn_task));
     tsk->session = session; 
@@ -412,6 +441,10 @@ void *__async_grequests(void *_args){
     struct dcn_session *session = tsk->session;
     struct allocator *allc = session->client->allc;
     ullong wait_from = tsk->from_uid;
+    struct logger *lg = session->lgr;
+    
+    dblevel_push(lg, "__async_grequests");
+    dblog(lg, INFO, "gathering from %i", wait_from);
     
     struct packet *answer_packet = alc_calloc(allc, 1, sizeof(struct packet));
     packet_init(allc, answer_packet, NULL, 0, 0, 0, 0);
@@ -449,28 +482,34 @@ void *__async_grequests(void *_args){
         // very unlikely
         if (!was_req){
             alc_free(allc, answer_packet);
+            dblevel_pop(lg);
             free(tsk);
             return NULL;
         }
 
     } else {
-        printf("waiting for request from %llu\n", wait_from);
+        dblog(lg, INFO, "waiting for request from %llu", wait_from);
+        //**printf("waiting for request from %llu\n", wait_from);
         struct usr_waiter *waiter = NULL;
         if (!map_at(&session->usr_waiters, &wait_from, (void**)&waiter)){
+            dblog(lg, ERROR, "no usr_waiter for %llu", wait_from);
             alc_free(allc, answer_packet);
+            dblevel_pop(lg);
             free(tsk);
             return NULL;
         }
 
+        dblog(lg, INFO, "waiter wait for %llu", wait_from);
         waiter_wait(waiter->req_waiter);
-        printf("request from %llu received\n", wait_from);
+        dblog(lg, INFO, "request from %llu received\n", wait_from);
         struct map *urs = &session->usr_responses;
         struct usr_resp *lc_ursp = NULL;
 
         // this user (to_uid) didn't send anything (very unlikely)
         if (!map_at(urs, &wait_from, (void**)&lc_ursp )){
-            printf("this user (to_uid) didn't send anything (very unlikely)\n");
+            dblog(lg, WARNING, "this user (to_uid: %llu) didn't send anything (very unlikely)", wait_from);
             alc_free(allc, answer_packet);
+            dblevel_pop(lg);
             free(tsk);
             return NULL;
         }
@@ -480,20 +519,22 @@ void *__async_grequests(void *_args){
 
         // no blocks in responses queue (very unlikely)
         if (1 == pop_block(lc_ursp->requests, &resp_block)){
-            printf("no blocks in responses queue (very unlikely)\n");
+            dblog(lg, WARNING, "no blocks in responses queue (very unlikely)");
             alc_free(allc, answer_packet);
+            dblevel_pop(lg);
             free(tsk);
             return NULL;
         }
 
-        printf("deserializing response\n");
+        dblog(lg, INFO, "deserializing response");
         packet_deserial(allc, answer_packet, &resp_block);
-        printf("response deserialized\n");
-        printf("response: %s\n", answer_packet->data.data);
-        printf("response size: %zu\n", answer_packet->data.dsize);
+        dblog(lg, INFO, "response deserialized");
+        dblog(lg, INFO, "response: %s", answer_packet->data.data);
+        dblog(lg, INFO, "response size: %zu", answer_packet->data.dsize);
         qblock_free(lc_ursp->requests->allc, &resp_block);
     }
 
+    dblevel_pop(lg);
     free(tsk);
     return (void*)answer_packet; // return received struct packet * (allocated)
 }

@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 
+#include <dnet/general.h>
 #include <queue.h>
 #include <asyncio.h>
 

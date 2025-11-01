@@ -2,12 +2,20 @@
 #include <queue.h>
 #include <asyncio.h>
 
+typedef enum {
+    REQUEST,
+    RESPONSE,
+    SIGNAL,
+    BROADCAST,
+    SIG_BROADCAST
+} PACKET_TYPE;
+
 struct packet {
     struct qblock data;
     ullong from_uid;
     ullong to_uid;
     ullong muid;
-    bool   is_request; // or answer if false
+    PACKET_TYPE packtype;
 
     bool   from_os;
 };
@@ -70,3 +78,5 @@ struct packet *move_packet(
     struct allocator *allc, 
     struct packet *src
 );
+
+size_t packet_general_ofs();

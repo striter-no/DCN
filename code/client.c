@@ -1,94 +1,123 @@
-#define DEBUGGING
-#include "DCN/include/dnet/general.h"
 #include <asyncio.h>
 #include <allocator.h>
 #include <dnet/client.h>
+#include <dnet/general.h>
+#include <logger.h>
+#include <stdio.h>
 
-int main(int argc, char *argv[]){
-    ullong MY_UID = atoll(argv[1]);
-    ullong TO_UID = atoll(argv[2]);
+struct dnet_state {
+    struct ev_loop   *loop;
+    struct allocator *allc;
 
-    printf("entry\n");
-    struct ev_loop loop;
-    struct allocator allc;
-    allocator_init(&allc);
-
-    struct dcn_client client;
+    struct socket_md   socket;
+    struct dcn_client  client;
     struct dcn_session session;
+};
 
-    struct socket_md md;
-    ccreate_socket(&md, "127.0.0.1", 9000);
-    if (connect_to(&md) != 0){
-        printf("cannot connect: %s\n", strerror(errno));
+int dnet_state(
+    struct dnet_state *out,
+    struct ev_loop   *loop,
+    struct allocator *allc,
+
+    char *serv_ip,
+    unsigned short port,
+    ullong my_uid
+){
+    out->loop = loop;
+    out->allc = allc;
+    
+    ccreate_socket(&out->socket, serv_ip, port);
+    if (connect_to(&out->socket) != 0){
+        fprintf(stderr, "[error] cannot connect: %s\n", strerror(errno));
         return -1;
     }
 
-    printf("loop creation\n");
+    dcn_cli_init(allc, &out->client, loop, &out->socket);
+    dcn_new_session(&out->session, &out->client, my_uid);
+
+    return 0;
+}
+
+void dnet_run(struct dnet_state *state){
+    dcn_cli_run(&state->session);
+}
+
+void dnet_stop(struct dnet_state *state){
+    dcn_end_session(&state->session);
+    close(state->socket.fd);
+}
+
+int main(int argc, char *argv[]){
+    struct logger lgr;
+    logger_init(&lgr, stderr);
+
+    ullong MY_UID = atoll(argv[1]);
+    ullong TO_UID = atoll(argv[2]);
+
+    dblog(&lgr, INFO, "init allc & loop");
+    struct ev_loop loop;
+    struct allocator allc;
+    allocator_init(&allc);
     loop_create(&allc, &loop, 3);
-    
-    printf("dcn creation\n");
-    dcn_cli_init(&allc, &client, &loop, &md);
-    dcn_new_session(&session, &client, MY_UID);
-    dcn_cli_run(&session);
     loop_run(&loop);
+
+    dblog(&lgr, INFO, "init state");
+    struct dnet_state state;
+    dnet_state(&state, &loop, &allc, "127.0.0.1", 9000, MY_UID);
     
-    {
-        printf("packet creation\n");
-        struct packet pack;
-        packet_templ(
-            &allc, &pack, 
-            "Hello", 6
-        );
+    dblog(&lgr, INFO, "dnet run");
+    dnet_run(&state);
 
-        // no need to free(resp) cuz it is allocated in &allc
-        // request is send (await to get response)
-        printf("sending request\n");
-        Future *resp = request(&session, &pack, TO_UID, true);
-        
-        // wait for sent request
-        printf("waiting for incoming requests\n");
-        struct packet *req_packet;
-        Future *req  = async_grequests(&session, TO_UID);
-        req_packet = await(req);
+    dblog(&lgr, INFO, "pack creation");
+    struct dcn_session *session = &state.session;
+    struct packet pack;
+    packet_templ(&allc, &pack, "Hello", 6);
+    session->lgr = &lgr;
 
-        printf("req_packet pointer: %p\n", (void*)req_packet);
-        printf("req_packet size: expected %zu, actual? \n", sizeof(struct packet));
+    // send request
+    // and get incoming request
+    dblog(&lgr, INFO, "sending request");
+    struct packet *req_packet;
+    Future *resp = request(session, &pack /*data to send*/, TO_UID, REQUEST);
 
-        if (req_packet == NULL){
-            printf("no incoming requests\n");
-            free(req_packet);
-            exit(1);
-        }
+    dblog(&lgr, INFO, "gathering request");
+    Future *req  = async_grequests(session, TO_UID);
+    dblog(&lgr, INFO, "awaiting requests");
+    req_packet = await(req);
 
-        printf("Packet sanity check:\n");
-        printf("  from_uid: %llu\n", req_packet->from_uid);
-        printf("  to_uid: %llu\n", req_packet->to_uid);
-        printf("  muid: %llu\n", req_packet->muid);
-        printf("  data.dsize: %zu\n", req_packet->data.dsize);
-        printf("  data.data pointer: %p\n", (void*)req_packet->data.data);
-
-        printf("got incoming request (%zu bytes)\n", req_packet->data.dsize);
-        fwrite(req_packet->data.data, 1, req_packet->data.dsize, stdout);
-        printf("\n");
-        // answer with echo
-        await(request(&session, &pack, TO_UID, false)); 
+    if (req_packet != NULL){
+        dblog(&lgr, INFO, "incoming request...");
+        printf("got incoming request (%zu bytes): %s\n", req_packet->data.dsize, req_packet->data.data);
         packet_free(&allc, req_packet);
+        
+        // answer to the incoming request
+        await(request(session, &pack /*data to answer with*/, TO_UID, RESPONSE));
+    } else {
+        dblog(&lgr, WARNING, "no incoming requests");
+        printf("no incoming requests\n");
+        free(req_packet);
+    }
 
-        // wait for response
-        struct packet *resp_packet = await(resp);
-        printf("got response (%zu bytes): ", resp_packet->data.dsize);
-        fwrite(resp_packet->data.data, 1, resp_packet->data.dsize, stdout);
-        printf("\n");
+    dblog(&lgr, INFO, "awaiting response");
+    struct packet *resp_packet = await(resp); /*awaiting for get response */
+    if (resp_packet == NULL){
+        dblog(&lgr, ERROR, "response is null");
+    } else {
+        dblog(&lgr, INFO, "got response");
+        printf(
+            "got response (%zu bytes): %s\n", 
+            resp_packet->data.dsize, 
+            resp_packet->data.data
+        );
 
         packet_free(&allc, resp_packet);
     }
 
-    printf("ending session\n");
-    dcn_end_session(&session);
-    close(md.fd);
+    dblog(&lgr, INFO, "dnet stop");
+    dnet_stop(&state);
 
-    printf("ending loop and allocator\n");
+    dblog(&lgr, INFO, "loop & allc stop");
     loop_stop(&loop);
     allocator_end(&allc);
-    printf("end\n");
+    logger_stop(&lgr);
 }

@@ -203,7 +203,7 @@ void *await(Future *fut){
     
     void *result;
     memcpy(&result, out.data, sizeof(void*));
-    printf("in await result: %p\n", result);
+    //** printf("in await result: %p\n", result);
 
     qblock_free(allc, &out);
     return result;
@@ -219,7 +219,7 @@ void __loop_worker(
 
     if (result != NULL){
         generic_qbfill(crt->allc, out, &result, sizeof(void *));
-        printf("filling out %p\n", result);
+        //**printf("filling out %p\n", result);
     }
 
     __coroutine_free(crt);
@@ -307,7 +307,7 @@ void loop_run(
 void loop_stop(
     struct ev_loop *loop
 ){
-    printf("loop_stop\n");
+    //**printf("loop_stop\n");
     atomic_store(&loop->working_pool.is_active, false);
     thrd_join(loop->events_thread, NULL);
     mtx_destroy(&loop->events_mtx);

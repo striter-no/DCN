@@ -9,6 +9,7 @@ fi
 EXEC_NAME=$1
 CC=${2:-gcc}
 CFLAGS="-pedantic -Wall -Wextra -g" # -fsanitize=address
+# CFLAGS="-pedantic -Wall -Wextra -g -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -fvisibility=hidden -fno-common -fsanitize=address,undefined,cfi -flto"
 CINCL="./code/DCN/include"
 CLIB="./code/DCN/lib"
 LIBS="-lm"
