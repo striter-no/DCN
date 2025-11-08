@@ -55,8 +55,10 @@ struct dcn_client {
 };
 
 struct usr_resp {
-    struct queue  *requests; // is_request: true
-    struct queue *responses; // is_request: false
+    struct queue *requests; // is_request: true
+    
+    // ullong (cmuid): struct packet * (allocated)
+    struct map   responses; // is_request: false
 };
 
 struct usr_waiter {
@@ -69,6 +71,8 @@ struct dcn_session {
     struct dcn_client *client;
     atomic_bool is_active;
 
+    mtx_t usr_waiters_mtx;
+    mtx_t usr_responses_mtx;
     ullong last_muid;
     ullong cli_uid;
 
@@ -107,6 +111,7 @@ struct dcn_task {
 struct grsps_task {
     struct dcn_session *session;
     ullong from_uid; // if from_uid == 0 then it is misc mode
+    bool blocking;
 };
 
 void dcn_cli_init(
@@ -171,10 +176,12 @@ Future* request(
 // get incoming requests from uid
 Future *async_grequests(
     struct dcn_session *session,
-    ullong from_uid
+    ullong from_uid,
+    bool blocking
 );
 
 // get any incoming request
 Future *async_misc_grequests(
-    struct dcn_session *session
+    struct dcn_session *session,
+    bool blocking
 );

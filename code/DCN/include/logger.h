@@ -4,9 +4,8 @@
 #include <array.h>
 #include <threads.h>
 #include <unistd.h>
-#include <unistdio.h>
+// #include <unistdio.h>
 #include <sys/syscall.h>
-#include <string.h>
 #include <time.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -18,6 +17,7 @@ struct logger {
 
     FILE *output;
     char *last_log;
+    bool is_active;
 };
 
 typedef enum {
@@ -49,5 +49,13 @@ void dblevel_push(
 );
 
 void dblevel_pop(
+    struct logger *log
+);
+
+void logger_act(
+    struct logger *log
+);
+
+void logger_deact(
     struct logger *log
 );

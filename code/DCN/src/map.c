@@ -107,6 +107,13 @@ bool map_in(struct map *map, void *key){
     return found;
 }
 
+bool map_empty(struct map *map){
+    mtx_lock(&map->_mtx);
+    bool is_empty = map->len == 0;
+    mtx_unlock(&map->_mtx);
+    return is_empty;
+}
+
 bool map_value_in(struct map *map, void *value){
     mtx_lock(&map->_mtx);
     bool found = false;

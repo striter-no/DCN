@@ -26,6 +26,8 @@ struct client {
 
     char ip[20];
     unsigned short port;
+    
+    struct qblock acc; // stream accumulator for partial/multiple packets
 };
 
 struct socket_md {
@@ -80,7 +82,7 @@ int accept_client(
     struct client **cli_out
 );
 
-int close_client(int epfd, struct client *cli);
+int close_client(struct allocator *allc, int epfd, struct client *cli);
 
 int run_server(
     struct allocator *allc,

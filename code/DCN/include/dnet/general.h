@@ -15,6 +15,7 @@ struct packet {
     ullong from_uid;
     ullong to_uid;
     ullong muid;
+    ullong cmuid;
     PACKET_TYPE packtype;
 
     bool   from_os;
@@ -79,4 +80,4 @@ struct packet *move_packet(
     struct packet *src
 );
 
-size_t packet_general_ofs();
+size_t packet_general_ofs(void);

@@ -193,7 +193,11 @@ Future *async_create(
 void *await(Future *fut){
     struct qblock out;
     // save allocator before await_future frees fut (sets fut->pool to NULL)
-    struct allocator *allc = fut->pool->allc;
+    
+    struct allocator *allc = fut->pool ? fut->pool->allc : NULL;
+    if (allc == NULL) {
+        return NULL;
+    }
     await_future(fut, &out);
     
     if (out.dsize != sizeof(void*) || out.data == NULL) {

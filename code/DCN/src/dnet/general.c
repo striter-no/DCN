@@ -1,8 +1,8 @@
 #include <dnet/general.h>
 #include <stddef.h>
 
-size_t packet_general_ofs(){
-    return sizeof(ullong) * 3 + sizeof(size_t) + sizeof(PACKET_TYPE) + sizeof(bool);
+size_t packet_general_ofs(void){
+    return sizeof(ullong) * 4 + sizeof(size_t) + sizeof(PACKET_TYPE) + sizeof(bool);
 }
 
 void packet_serial(
@@ -18,6 +18,7 @@ void packet_serial(
     memcpy(out->data + offset, &pack->from_uid,   sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->to_uid,     sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->muid,       sizeof(ullong)); offset += sizeof(ullong);
+    memcpy(out->data + offset, &pack->cmuid,      sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->packtype,   sizeof(PACKET_TYPE)); offset += sizeof(PACKET_TYPE);
     memcpy(out->data + offset, &pack->from_os,    sizeof(bool));   offset += sizeof(bool);
     memcpy(out->data + offset, &pack->data.dsize, sizeof(size_t)); offset += sizeof(size_t);
@@ -44,6 +45,7 @@ bool packet_deserial(
     memcpy(&out->from_uid,   data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->to_uid,     data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->muid,       data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
+    memcpy(&out->cmuid,      data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->packtype,   data->data + offset, sizeof(PACKET_TYPE));   offset += sizeof(PACKET_TYPE);
     memcpy(&out->from_os,    data->data + offset, sizeof(bool));   offset += sizeof(bool);
     
@@ -71,6 +73,7 @@ void packet_free(
     pack->from_uid   = 0;
     pack->to_uid     = 0;
     pack->muid       = 0;
+    pack->cmuid      = 0;
     pack->packtype   = REQUEST;
     pack->from_os    = false;
 }
@@ -93,6 +96,7 @@ void packet_init(
     pack->muid     = muid;
     pack->from_os  = false;
     pack->packtype = REQUEST;
+    pack->cmuid      = 0;
 }
 
 void qpacket_init(
@@ -112,6 +116,7 @@ void qpacket_init(
     pack->from_os  = false;
     pack->muid     = muid;
     pack->packtype = REQUEST;
+    pack->cmuid      = 0;
 }
 
 void packet_fill(
@@ -136,10 +141,11 @@ void packet_templ(
 struct packet *copy_packet(struct allocator *allc, const struct packet *src) {
     struct packet *dest = alc_calloc(allc, 1, sizeof(struct packet));
     dest->from_uid = src->from_uid;
-    dest->to_uid = src->to_uid;
-    dest->muid = src->muid;
+    dest->to_uid   = src->to_uid;
+    dest->muid     = src->muid;
     dest->packtype = src->packtype;
-    dest->from_os = src->from_os;
+    dest->from_os  = src->from_os;
+    dest->cmuid    = src->cmuid;
     
     qblock_init(&dest->data);
     qblock_copy(allc, &dest->data, &src->data);
@@ -149,15 +155,7 @@ struct packet *copy_packet(struct allocator *allc, const struct packet *src) {
 
 struct packet *move_packet(struct allocator *allc, struct packet *src) {
     
-    struct packet *dest = alc_calloc(allc, 1, sizeof(struct packet));
-    dest->from_uid = src->from_uid;
-    dest->to_uid = src->to_uid;
-    dest->muid = src->muid;
-    dest->packtype = src->packtype;
-    dest->from_os = src->from_os;
-    
-    qblock_init(&dest->data);
-    qblock_copy(allc, &dest->data, &src->data);
+    struct packet *dest = copy_packet(allc, src);
     
     packet_free(allc, src);
     alc_free(allc, src);

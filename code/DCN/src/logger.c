@@ -10,6 +10,7 @@ void logger_init(
     log->output = output;
     log->last_log = NULL;
     log->logs_num = 0;
+    log->is_active = true;
 }
 
 void logger_stop(
@@ -22,12 +23,26 @@ void logger_stop(
     log->logs_num = 0;
 }
 
+void logger_act(
+    struct logger *log
+){
+    log->is_active = true;
+}
+
+void logger_deact(
+    struct logger *log
+){
+    log->is_active = false;
+}
+
 void dblog(
     struct logger *log,
     LOG_TYPES type,
     char *format,
     ...
 ){
+    if(!log->is_active) return;
+
     char *date = malloc(9); // %H:%M:%S
     time_t rawtime;
     struct tm *timeinfo;
@@ -110,7 +125,7 @@ void dblog(
             lvl,
             message
         );
-        log->last_log = malloc(strlen(message) + 1);
+        log->last_log = realloc(log->last_log, strlen(message) + 1);
         strcpy(log->last_log, message);
     }
     
@@ -124,6 +139,7 @@ void dblevel_push(
     struct logger *log,
     char *level_name // valid string
 ){
+    if(!log->is_active) return;
     array_append(&log->levels, &level_name);
     dblog(log, INFO, "new lvl");
 }
@@ -131,6 +147,7 @@ void dblevel_push(
 void dblevel_pop(
     struct logger *log
 ){
+    if(!log->is_active) return;
     if (array_del(&log->levels, array_size(&log->levels) - 1)){
         dblog(log, INFO, "pop lvl");
     }

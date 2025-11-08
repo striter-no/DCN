@@ -1,4 +1,5 @@
 #include <netw/epdplx-s.h>
+#include <dnet/general.h>
 
 int screate_socket(
     struct socket_md *smd,
@@ -159,6 +160,7 @@ int accept_client(
     client->port = cli_md->port;
     queue_init(&client->read_q, allc);
     queue_init(&client->write_q, allc);
+    qblock_init(&client->acc); // initialize accumulator
 
     *cli_out = client;
 
@@ -179,7 +181,7 @@ int accept_client(
     return 0;   
 }
 
-int close_client(int epfd, struct client *cli){
+int close_client(struct allocator *allc, int epfd, struct client *cli){
     printf("[DEBUG] Closing client fd=%d, ip=%s, port=%d\n", cli->fd, cli->ip, cli->port);
     if (!cli) return 1;
 
@@ -194,6 +196,7 @@ int close_client(int epfd, struct client *cli){
 
     queue_free(&cli->read_q);
     queue_free(&cli->write_q);
+    qblock_free(allc, &cli->acc); // free accumulator
     close(cli->fd);
     free(cli);
 
@@ -245,7 +248,7 @@ int run_server(
 
                 if (ev.events & (EPOLLHUP | EPOLLERR)) {
                     custom_disconnector(cli, state_holder);
-                    close_client(epfd, cli);
+                    close_client(allc, epfd, cli);
                     continue;
                 }
                 
@@ -256,39 +259,56 @@ int run_server(
                     ret = nbep_read(cli->fd, &r_buff, &r_size);
                     if (ret == -3 || ret == -4){
                         custom_disconnector(cli, state_holder);
-                        close_client(epfd, cli);
+                        close_client(allc, epfd, cli);
                         continue;
                     }
 
-                    if (r_size != 0){
-                        struct qblock block;
-                        qblock_init(&block);
-                        qblock_fill(allc, &block, r_buff, r_size);
+                    // Append to accumulator
+                    if (r_size > 0){
+                        char *newbuf = alc_realloc(allc, cli->acc.data, cli->acc.dsize + r_size);
+                        if (newbuf != NULL){
+                            memcpy(newbuf + cli->acc.dsize, r_buff, r_size);
+                            cli->acc.data = newbuf;
+                            cli->acc.dsize += r_size;
+                        }
                         free(r_buff);
+                    }
 
-                        push_block(&cli->read_q, &block);
-                        qblock_free(allc, &block);
+                    // Try to extract as many full packets as possible
+                    const size_t header_sz = packet_general_ofs();
+                    while (cli->acc.dsize >= header_sz){
+                        size_t payload_sz = 0;
+                        memcpy(&payload_sz, cli->acc.data + packet_general_ofs() - sizeof(size_t), sizeof(size_t));
+                        size_t pkt_sz = header_sz + payload_sz;
+                        if (cli->acc.dsize < pkt_sz)
+                            break;
 
+                        struct qblock pkt;
+                        qblock_init(&pkt);
+                        pkt.data = alc_malloc(allc, pkt_sz);
+                        pkt.dsize = pkt_sz;
+                        memcpy(pkt.data, cli->acc.data, pkt_sz);
+                        push_block(&cli->read_q, &pkt);
+                        qblock_free(allc, &pkt);
+
+                        // remove consumed bytes from accumulator
+                        size_t remain = cli->acc.dsize - pkt_sz;
+                        if (remain > 0)
+                            memmove(cli->acc.data, cli->acc.data + pkt_sz, remain);
+                        cli->acc.dsize = remain;
+                        if (remain == 0){
+                            alc_free(allc, cli->acc.data);
+                            cli->acc.data = NULL;
+                        } else {
+                            char *shr = alc_realloc(allc, cli->acc.data, remain);
+                            if (shr != NULL) cli->acc.data = shr;
+                        }
+
+                        // schedule message handler for each packet
                         struct worker_task *task = malloc(sizeof(struct worker_task));
                         task->cli_ptr = cli;
                         task->state_holder = state_holder;
-
                         async_create(loop, async_worker, task);
-
-                        // if( epoll_ctl(
-                        //     epfd, EPOLL_CTL_MOD, 
-                        //     cli->fd, &(struct epoll_event){
-                        //         .events = EPOLLIN | EPOLLOUT,
-                        //         .data.ptr = cli
-                        //     }
-                        // ) < 0){
-                        //     atomic_store(is_running, false);
-                        //     fprintf(
-                        //         stderr, 
-                        //         "[epoll][error] while epollin: %s\n", strerror(errno)
-                        //     );
-                        //     break;
-                        // }
                     }
                 }
 

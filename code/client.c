@@ -50,6 +50,7 @@ void dnet_stop(struct dnet_state *state){
 int main(int argc, char *argv[]){
     struct logger lgr;
     logger_init(&lgr, stderr);
+    // logger_deact(&lgr);
 
     ullong MY_UID = atoll(argv[1]);
     ullong TO_UID = atoll(argv[2]);
@@ -70,18 +71,20 @@ int main(int argc, char *argv[]){
 
     dblog(&lgr, INFO, "pack creation");
     struct dcn_session *session = &state.session;
-    struct packet pack;
+    struct packet pack, echopack;
     packet_templ(&allc, &pack, "Hello", 6);
+    packet_templ(&allc, &echopack, "Hello echo", 11);
     session->lgr = &lgr;
 
     // send request
     // and get incoming request
     dblog(&lgr, INFO, "sending request");
     struct packet *req_packet;
-    Future *resp = request(session, &pack /*data to send*/, TO_UID, REQUEST);
+    Future *resp = request(session, &pack /*data to send*/, TO_UID, BROADCAST);
 
     dblog(&lgr, INFO, "gathering request");
-    Future *req  = async_grequests(session, TO_UID);
+    // ... add wait untill async_grequests(..., bool wait_for);
+    Future *req  = async_grequests(session, TO_UID, true);
     dblog(&lgr, INFO, "awaiting requests");
     req_packet = await(req);
 
@@ -91,7 +94,7 @@ int main(int argc, char *argv[]){
         packet_free(&allc, req_packet);
         
         // answer to the incoming request
-        await(request(session, &pack /*data to answer with*/, TO_UID, RESPONSE));
+        await(request(session, &echopack /*data to answer with*/, TO_UID, RESPONSE));
     } else {
         dblog(&lgr, WARNING, "no incoming requests");
         printf("no incoming requests\n");

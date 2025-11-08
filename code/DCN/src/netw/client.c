@@ -115,7 +115,7 @@ void run_client(
     //**printf("starting main loop\n"); 
     // #endif
     while (atomic_load(is_running)){
-        int pret = poll(fds, 1, 10);
+        int pret = poll(fds, 1, 100);
         if (pret == -1){
             fprintf(stderr, "[main][error] poll returned -1: %s", strerror(errno));
             atomic_store(is_running, false);
