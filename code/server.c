@@ -11,7 +11,7 @@ int main(){
     allocator_init(&allc);
 
     struct dcn_server serv;
-    struct socket_md socket;
+    struct ssocket_md socket;
     if (screate_socket(&socket, "127.0.0.1", 9000) != 0){
         fprintf(stderr, "cannot create socket: %s\n", strerror(errno));
         return -1;

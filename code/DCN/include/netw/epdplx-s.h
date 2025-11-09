@@ -30,7 +30,7 @@ struct client {
     struct qblock acc; // stream accumulator for partial/multiple packets
 };
 
-struct socket_md {
+struct ssocket_md {
     struct sockaddr_in inaddr;
     socklen_t in_al;
     
@@ -46,13 +46,13 @@ struct worker_task {
 };
 
 int screate_socket(
-    struct socket_md *smd,
+    struct ssocket_md *smd,
     char *ip,
     unsigned short port
 );
 
 int serv_start(
-    struct socket_md *smd,
+    struct ssocket_md *smd,
     int epfd,
     size_t max_clients
 );
@@ -76,9 +76,9 @@ int sfull_write(
 
 int accept_client(
     struct allocator *allc,
-    struct socket_md *serv_md,
+    struct ssocket_md *serv_md,
     int epfd,
-    struct socket_md *cli_md,
+    struct ssocket_md *cli_md,
     struct client **cli_out
 );
 
@@ -86,7 +86,7 @@ int close_client(struct allocator *allc, int epfd, struct client *cli);
 
 int run_server(
     struct allocator *allc,
-    struct socket_md *server,
+    struct ssocket_md *server,
     struct ev_loop   *loop,
     atomic_bool *is_running,
     void *(*async_worker)(void *),

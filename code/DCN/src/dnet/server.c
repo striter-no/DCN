@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <dnet/server.h>
 #include <stdbool.h>
 
@@ -20,6 +21,54 @@ void __dcn_disconnector(
         map_erase(&serv->dcn_clients, key);
     } else {
         printf("[unregistered] disconnected %s:%i\n", cli->ip, cli->port);
+    }
+}
+
+void traceroute(
+    struct dcn_server *server,
+    struct client *from,
+
+    ullong UID_TTR
+){
+    mtx_lock(&server->dcn_clients._mtx);
+    size_t len = server->dcn_clients.len;
+    mtx_unlock(&server->dcn_clients._mtx);
+
+    array_append(&server->trace_requests, &UID_TTR);
+
+    for (size_t i = 0; i < len; i++){
+        ullong key; 
+        if (0 != map_key_at(&server->dcn_clients, &key, i))
+            continue;
+
+        struct client **to_cli_ptr = NULL;
+        if (!map_at(&server->dcn_clients, &key, (void**)&to_cli_ptr))
+            continue;
+        
+        struct client *to_cli = *to_cli_ptr;
+        if (!(to_cli_ptr && *to_cli_ptr)) 
+            continue;
+
+        if (to_cli->fd == from->fd) 
+            continue;
+
+        struct trp_data data;
+        data.is_response = false;
+        data.success     = false;
+        data.req_uid     = UID_TTR;
+
+        struct packet trp = create_traceroute(
+            server->allc,
+            data, 
+            0
+        );
+
+        struct qblock trp_block;
+        packet_serial(server->allc, &trp, &trp_block);
+        push_block(&to_cli->write_q, &trp_block);
+
+        qblock_free(server->allc, &trp_block);
+        packet_free(server->allc, &trp);
     }
 }
 
@@ -102,6 +151,82 @@ void *dcn_async_worker(void *_args){
         pack.muid      // ANSWER Message UID
     );
     answer.cmuid = 0;
+
+    if (pack.to_uid == 0){
+        if (pack.packtype != TRACEROUTE){
+            printf(" to_uid == 0 and packtype == %i -> forbidden\n", pack.packtype);
+
+            int forbidden = 102;
+            qblock_fill(allc, &answer.data, (char*)&forbidden, sizeof(forbidden));
+            struct qblock ansblock;
+            packet_serial(allc, &answer, &ansblock);
+            push_block(&cli->write_q, &ansblock);
+            qblock_free(allc, &ansblock);
+
+            packet_free(allc, &pack);
+            printf("dcn_async_worker exit\n");
+            return NULL;
+        }
+
+        // traceroute
+        struct trp_data trp_data;
+        if (!trp_data_deserial(&trp_data, &pack.data)){
+            printf(" cannot deserial traceroute\n");
+
+            int fail = 500;
+            qblock_fill(allc, &answer.data, (char*)&fail, sizeof(fail));
+            struct qblock ansblock;
+            packet_serial(allc, &answer, &ansblock);
+            push_block(&cli->write_q, &ansblock);
+            qblock_free(allc, &ansblock);
+
+            packet_free(allc, &pack);
+            printf("dcn_async_worker exit\n");
+            return NULL;
+        }
+
+        // check server requests
+        if (trp_data.is_response){
+            mtx_lock(&serv->trace_requests._mtx);
+            
+            size_t inx = array_index(
+                &serv->trace_requests,
+                &trp_data.req_uid
+            );
+            
+            int code = 200;
+            if (inx == SIZE_MAX)
+                code = 103;
+            else
+                array_del(
+                    &serv->trace_requests,
+                    inx
+                );
+
+            mtx_unlock(&serv->trace_requests._mtx);
+
+            qblock_fill(allc, &answer.data, (char*)&code, sizeof(code));
+            struct qblock ansblock;
+            packet_serial(allc, &answer, &ansblock);
+            push_block(&cli->write_q, &ansblock);
+            qblock_free(allc, &ansblock);
+
+            packet_free(allc, &pack);
+            printf("dcn_async_worker exit\n");
+            
+        // it is request
+        } else {
+            mtx_lock(&serv->trace_requests._mtx);
+            array_append(
+                &serv->trace_requests, 
+                &trp_data.req_uid
+            );
+            traceroute(serv, cli, trp_data.req_uid);
+            mtx_unlock(&serv->trace_requests._mtx);
+        }
+
+        return NULL;
+    }
 
     if (!map_at(&serv->dcn_clients, &pack.to_uid, (void**)&to_cli_ptr)){
         printf(" %llu - no such client\n", pack.to_uid);
@@ -257,7 +382,7 @@ void dcn_serv_init(
     struct allocator  *allc,
     struct dcn_server *serv,
     struct ev_loop    *loop,
-    struct socket_md  *sock,
+    struct ssocket_md  *sock,
     atomic_bool *is_running
 ){
     serv->allc = allc;

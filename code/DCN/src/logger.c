@@ -5,6 +5,7 @@ void logger_init(
     struct logger *log, 
     FILE *output
 ){
+    if (!log) return;
     allocator_init(&log->allc);
     array_init(&log->levels, sizeof(char *));
     log->output = output;
@@ -16,6 +17,7 @@ void logger_init(
 void logger_stop(
     struct logger *log
 ){
+    if (!log) return;
     array_free(&log->levels);
     allocator_end(&log->allc);
     free(log->last_log);
@@ -26,12 +28,14 @@ void logger_stop(
 void logger_act(
     struct logger *log
 ){
+    if (!log) return;
     log->is_active = true;
 }
 
 void logger_deact(
     struct logger *log
 ){
+    if (!log) return;
     log->is_active = false;
 }
 
@@ -41,6 +45,7 @@ void dblog(
     char *format,
     ...
 ){
+    if (!log) return;
     if(!log->is_active) return;
 
     char *date = malloc(9); // %H:%M:%S
@@ -139,6 +144,7 @@ void dblevel_push(
     struct logger *log,
     char *level_name // valid string
 ){
+    if (!log) return;
     if(!log->is_active) return;
     array_append(&log->levels, &level_name);
     dblog(log, INFO, "new lvl");
@@ -147,6 +153,7 @@ void dblevel_push(
 void dblevel_pop(
     struct logger *log
 ){
+    if (!log) return;
     if(!log->is_active) return;
     if (array_del(&log->levels, array_size(&log->levels) - 1)){
         dblog(log, INFO, "pop lvl");

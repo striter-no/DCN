@@ -1,5 +1,6 @@
 #include <dnet/client.h>
 #include <threads.h>
+#include <time.h>
 
 // async function in run_client (gather any responses)
 void *__dcn_on_message(void *_args){
@@ -99,6 +100,22 @@ void *__dcn_on_message(void *_args){
         packet_free(allc, pack);
         alc_free(allc, pack);
         return NULL;
+    } else if (pack->packtype == TRACEROUTE) {
+        struct trp_data data;
+        trp_data_deserial(&data, &pack->data);
+
+        if (!data.is_response){
+            struct qblock req;
+            qblock_init(&req);
+            qblock_fill(allc, &req, (char*)&data.req_uid, sizeof(data.req_uid));
+
+            push_block(&session->trr_requests, &req);
+            qblock_free(allc, &req);
+            
+            waiter_set(&session->trr_waiter);
+            return NULL;
+        }
+
     } else {
         map_set(&session->responses, &pack->muid, &pack);
     }
@@ -162,6 +179,7 @@ void dcn_new_session(
     session->last_muid = 1;
     session->client = client;
     session->is_active = true;
+    session->lgr = NULL;
 
     map_init(
         &session->responses,
@@ -199,6 +217,12 @@ void dcn_new_session(
     waiter_init(session->client->allc, &session->req_waiter);
     mtx_init(&session->usr_responses_mtx, mtx_plain);
     mtx_init(&session->usr_waiters_mtx, mtx_plain);
+
+
+    // traceroute section
+    queue_init(&session->trr_requests, client->allc);
+    map_init(&session->trr_responses, sizeof(ullong), sizeof(ullong));
+    waiter_init(client->allc, &session->trr_waiter);
 }
 
 void dcn_end_session(
@@ -322,6 +346,7 @@ bool dcn_getresp(
                     case 102: *rcode = FORBIDEN_UID; break; // 4
                     case 103: *rcode = NO_DATA; break; // 5
                     case 200: *rcode = OK_STATUS; break; // 3
+                    case 500: *rcode = SERVER_ERROR; break; // 6
 
                     default:
                         *rcode = UNDEFINED_ERROR; // 0
@@ -478,7 +503,7 @@ void *__async_req(void *_args){
     return (void*)answer_packet;
 }
 
-// future -> struct packet * (get response) non/allc raw
+// future -> struct packet * (get response) allc
 Future* request(
     struct dcn_session *session,
     struct packet *pack,
@@ -628,16 +653,14 @@ void *__async_grequests(void *_args){
     return (void*)answer_packet; // return received struct packet * (allocated)
 }
 
-// future -> struct packet * (get request) non/allc raw
+// future -> struct packet * (get request) allc
 Future *async_grequests(
     struct dcn_session *session,
-    ullong from_uid,
-    bool blocking
+    ullong from_uid
 ){
     struct grsps_task *task = malloc(sizeof(struct grsps_task));
     task->from_uid = from_uid;
     task->session = session;
-    task->blocking = blocking;
 
     return async_create(
         session->client->loop,
@@ -646,19 +669,192 @@ Future *async_grequests(
     );
 }
 
-// future -> struct packet * (get request) non/allc raw
+// future -> struct packet * (get request) allc
 Future *async_misc_grequests(
-    struct dcn_session *session,
-    bool blocking
+    struct dcn_session *session
 ){
     struct grsps_task *task = malloc(sizeof(struct grsps_task));
     task->from_uid = 0;
     task->session = session;
-    task->blocking = blocking;
 
     return async_create(
         session->client->loop,
         __async_grequests,
         task
     );
+}
+
+void *__async_traceroute(void *_args){
+    struct trr_task *task = _args;
+    struct dcn_session *session = task->session;
+    struct allocator   *allc = session->client->allc;
+    struct packet      *trp = task->trp;
+
+    RESP_CODE rcode;
+    
+    struct packet answer;
+    struct waiter *waiter = NULL;
+    ullong resp_n = dcn_request(session, trp, trp->to_uid, &waiter);
+
+    wait_response(session, waiter, resp_n);
+    
+    dcn_getresp(session, resp_n, &answer, &rcode);
+    if (answer.data.dsize != sizeof(struct trp_data)){
+        packet_free(allc, &answer);
+        packet_free(allc, trp);
+        alc_free(allc, task);
+        return NULL;
+    }
+
+    struct trp_data *trp_data = alc_malloc(allc, sizeof(struct trp_data));
+    trp_data_deserial(trp_data, &answer.data);
+
+    packet_free(allc, &answer);
+    packet_free(allc, trp);
+    alc_free(allc, task);
+    return (void*)trp_data;
+}
+
+// future -> struct trp_data* (allc)
+Future *traceroute(
+    struct dcn_session *session,
+    ullong uid_ttr
+){
+    struct trp_data trp_data;
+    trp_data.is_response = false;
+    trp_data.req_uid     = uid_ttr;
+    trp_data.success     = false;
+
+    struct packet trp = create_traceroute(
+        session->client->allc, 
+        trp_data,
+        session->cli_uid
+    );
+
+    struct trr_task *trr_task = alc_malloc(
+        session->client->allc, 
+        sizeof(struct trr_task)
+    );
+
+    trr_task->session = session;
+    trr_task->trp = copy_packet(
+        session->client->allc, 
+        &trp
+    );
+
+    return async_create(
+        session->client->loop,
+        __async_traceroute,
+        trr_task
+    );
+}
+
+void *__async_gtraceroutes(void *_args){
+    struct dcn_session *session = _args;
+    struct allocator   *allc    = session->client->allc;
+    struct qblock       tdata;
+    qblock_init(&tdata);
+
+    waiter_wait(&session->trr_waiter);
+    if (1 == pop_block(&session->trr_requests, &tdata)){
+        return NULL;
+    }
+
+    struct trp_data *trp = alc_malloc(allc, sizeof(struct trp_data));
+    trp_data_deserial(trp, &tdata);
+
+    qblock_free(allc, &tdata);
+    return (void*)trp;
+}
+
+// future -> struct trp_data * (allocated/allc)
+Future *async_gtraceroutes(
+    struct dcn_session *session
+){
+    return async_create(
+        session->client->loop,
+        __async_gtraceroutes,
+        session
+    );
+}
+
+void *__async_traceroute_ans(void *_args){
+    struct grsps_task  *task = _args;
+    struct dcn_session *session = task->session;
+    struct allocator   *allc = session->client->allc;
+    ullong who_exists = task->from_uid;
+
+    struct trp_data tr_data;
+    tr_data.is_response = true;
+    tr_data.req_uid = who_exists;
+    tr_data.success = true;
+    struct packet pack = create_traceroute(allc, tr_data, session->cli_uid);
+    
+    RESP_CODE rcode;
+    struct packet answer;
+    struct waiter *waiter = NULL;
+    ullong resp_n = dcn_request(session, &pack, 0, &waiter);
+
+    
+    wait_response(session, waiter, resp_n);
+    dcn_getresp(session, resp_n, &answer, &rcode);
+    
+    bool *is_ok = alc_malloc(allc, sizeof(bool));
+    *is_ok = rcode == OK_STATUS;
+    
+    packet_free(allc, &answer);
+    packet_free(allc, &pack);
+    alc_free(allc, task);
+
+    alc_free(allc, task);
+    return (void*)is_ok;
+}
+
+// future -> bool* (allc)
+Future *traceroute_ans(
+    struct dcn_session *session,
+    ullong who_exists
+){
+    struct grsps_task *task = alc_malloc(session->client->allc, sizeof(struct grsps_task));
+    task->session = session;
+    task->from_uid = who_exists;
+
+    return async_create(
+        session->client->loop,
+        __async_traceroute_ans,
+        task
+    );
+}
+
+int dnet_state(
+    struct dnet_state *out,
+    struct ev_loop   *loop,
+    struct allocator *allc,
+
+    char *serv_ip,
+    unsigned short port,
+    ullong my_uid
+){
+    out->loop = loop;
+    out->allc = allc;
+    
+    ccreate_socket(&out->socket, serv_ip, port);
+    if (connect_to(&out->socket) != 0){
+        fprintf(stderr, "[error] cannot connect: %s\n", strerror(errno));
+        return -1;
+    }
+
+    dcn_cli_init(allc, &out->client, loop, &out->socket);
+    dcn_new_session(&out->session, &out->client, my_uid);
+
+    return 0;
+}
+
+void dnet_run(struct dnet_state *state){
+    dcn_cli_run(&state->session);
+}
+
+void dnet_stop(struct dnet_state *state){
+    dcn_end_session(&state->session);
+    close(state->socket.fd);
 }

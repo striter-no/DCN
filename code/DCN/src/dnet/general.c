@@ -2,7 +2,7 @@
 #include <stddef.h>
 
 size_t packet_general_ofs(void){
-    return sizeof(ullong) * 4 + sizeof(size_t) + sizeof(PACKET_TYPE) + sizeof(bool);
+    return sizeof(ullong) * 6 + sizeof(size_t) + sizeof(PACKET_TYPE) + sizeof(bool);
 }
 
 void packet_serial(
@@ -17,6 +17,8 @@ void packet_serial(
     size_t offset = 0;
     memcpy(out->data + offset, &pack->from_uid,   sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->to_uid,     sizeof(ullong)); offset += sizeof(ullong);
+    memcpy(out->data + offset, &pack->trav_fuid,  sizeof(ullong)); offset += sizeof(ullong);
+    memcpy(out->data + offset, &pack->trav_tuid,  sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->muid,       sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->cmuid,      sizeof(ullong)); offset += sizeof(ullong);
     memcpy(out->data + offset, &pack->packtype,   sizeof(PACKET_TYPE)); offset += sizeof(PACKET_TYPE);
@@ -44,6 +46,8 @@ bool packet_deserial(
     size_t offset = 0;
     memcpy(&out->from_uid,   data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->to_uid,     data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
+    memcpy(&out->trav_fuid,  data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
+    memcpy(&out->trav_tuid,  data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->muid,       data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->cmuid,      data->data + offset, sizeof(ullong)); offset += sizeof(ullong);
     memcpy(&out->packtype,   data->data + offset, sizeof(PACKET_TYPE));   offset += sizeof(PACKET_TYPE);
@@ -163,3 +167,51 @@ struct packet *move_packet(struct allocator *allc, struct packet *src) {
     //**printf("destination is %p\n", (void*)dest);
     return dest;
 }
+
+struct packet create_traceroute(
+    struct allocator *allc,
+    struct trp_data   tr_data,
+    ullong from_uid
+){
+    struct packet output;
+    packet_init(
+        allc, &output, 
+        NULL, 0, 
+        from_uid, 
+        0, 
+        0
+    );
+    struct qblock srl;
+    trp_data_serial(allc, &tr_data, &srl);
+    qblock_copy(allc, &output.data, &srl);
+    qblock_free(allc, &srl);
+
+    output.packtype = TRACEROUTE;
+    return output;
+}
+
+size_t trp_offset(void){
+    return sizeof(struct trp_data);
+}
+
+void trp_data_serial(
+    struct allocator *allc,
+    struct trp_data  *trpd,
+    struct qblock    *out
+){
+    out->data = alc_malloc(allc, trp_offset());
+    out->dsize = trp_offset();
+    memcpy(out->data, trpd, trp_offset());
+}
+
+bool trp_data_deserial(
+    struct trp_data  *trpd,
+    struct qblock    *data
+){
+    if (data->dsize != trp_offset())
+        return false;
+
+    memcpy(trpd, data->data, trp_offset());
+    return true;
+}
+

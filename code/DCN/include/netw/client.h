@@ -20,6 +20,7 @@
 
 struct worker_args {
     void *state_holder;
+
     struct queue *qr; // read from
     struct queue *qw; // push to
 };

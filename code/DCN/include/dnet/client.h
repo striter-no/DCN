@@ -43,7 +43,8 @@ typedef enum {
     NO_SUCH_USER,
     OK_STATUS,
     FORBIDEN_UID,
-    NO_DATA
+    NO_DATA,
+    SERVER_ERROR
 } RESP_CODE; 
 
 struct dcn_client {
@@ -100,6 +101,12 @@ struct dcn_session {
     //      >
     struct map usr_waiters;
     struct waiter req_waiter;
+
+    struct map    trr_responses;
+
+    struct queue  trr_requests;
+    struct waiter trr_waiter;
+
     thrd_t runnerthr;
 };
 
@@ -111,8 +118,34 @@ struct dcn_task {
 struct grsps_task {
     struct dcn_session *session;
     ullong from_uid; // if from_uid == 0 then it is misc mode
-    bool blocking;
 };
+
+struct trr_task {
+    struct dcn_session *session;
+    struct packet *trp;
+};
+
+struct dnet_state {
+    struct ev_loop   *loop;
+    struct allocator *allc;
+
+    struct socket_md   socket;
+    struct dcn_client  client;
+    struct dcn_session session;
+};
+
+int dnet_state(
+    struct dnet_state *out,
+    struct ev_loop   *loop,
+    struct allocator *allc,
+
+    char *serv_ip,
+    unsigned short port,
+    ullong my_uid
+);
+
+void dnet_run(struct dnet_state *state);
+void dnet_stop(struct dnet_state *state);
 
 void dcn_cli_init(
     struct allocator  *allc,
@@ -155,15 +188,8 @@ void wait_response(
     ullong muid
 );
 
+// ============= User interface functions =============
 
-// User interface functions
-
-
-// void uwait(
-//     struct dcn_session *session,
-//     struct waiter **waiter,
-//     ullong from_uid
-// );
 
 // send smth and get response
 Future* request(
@@ -176,12 +202,24 @@ Future* request(
 // get incoming requests from uid
 Future *async_grequests(
     struct dcn_session *session,
-    ullong from_uid,
-    bool blocking
+    ullong from_uid
 );
 
 // get any incoming request
 Future *async_misc_grequests(
+    struct dcn_session *session
+);
+
+Future *traceroute(
     struct dcn_session *session,
-    bool blocking
+    ullong uid_ttr
+);
+
+Future *traceroute_ans(
+    struct dcn_session *session,
+    ullong who_exists
+);
+
+Future *async_gtraceroutes(
+    struct dcn_session *session
 );

@@ -1,10 +1,7 @@
 #pragma once
 #include <string.h>
-#include <stdlib.h>
 #include <stdbool.h>
 #include <threads.h>
-
-#include <stdio.h>
 
 struct map {
     void *keys;
