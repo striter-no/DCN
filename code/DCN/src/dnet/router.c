@@ -49,11 +49,16 @@ int __router_runner(void *_args){
     struct logger      *lgr  = task->router->logger; 
 
     while (true){
-        Future *any_req = async_misc_grequests(session);
+        Future *any_req = async_misc_grequests(session, -1.0);
         struct packet *req_packet = await(any_req);
 
         if (req_packet == NULL){
             dblog(lgr, ERROR, "Incoming request is null in DSTATE: %zu", task->my_dstate);
+            continue;
+        }
+
+        if (!(req_packet->packtype == SIG_BROADCAST)){
+            dblog(lgr, ERROR, "Incoming request is not sig-broadcast: %i", req_packet->packtype);
             continue;
         }
 
@@ -62,7 +67,12 @@ int __router_runner(void *_args){
             struct dnet_state *tstate = &all_states[i];
             struct dcn_session *tsession = &tstate->session;
 
-            await(request(tsession, req_packet, 0, BROADCAST));
+            await(request(tsession, req_packet, 0, req_packet->packtype));
+            dblog(lgr, INFO, 
+                "  broadcasting #%zu from %s:%i to %s:%i", i, 
+                mst->socket.ip, mst->socket.port,
+                tstate->socket.ip, tstate->socket.port
+            );
         }
     }
     
@@ -75,11 +85,13 @@ void router_run(struct router *router){
     
     for (size_t i = 0; i < router->states_n; i++){
         struct router_task *task = alc_malloc(router->allc, sizeof(struct router_task));
+        task->router = router;
+        task->my_dstate = i;
 
         thrd_create(
             &threads[i], 
             __router_runner, 
-            &router->states[i]
+            task
         );
     }
 

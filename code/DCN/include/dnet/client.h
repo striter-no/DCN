@@ -118,6 +118,7 @@ struct dcn_task {
 struct grsps_task {
     struct dcn_session *session;
     ullong from_uid; // if from_uid == 0 then it is misc mode
+    double timeout_sec;
 };
 
 struct trr_task {
@@ -207,7 +208,8 @@ Future *async_grequests(
 
 // get any incoming request
 Future *async_misc_grequests(
-    struct dcn_session *session
+    struct dcn_session *session,
+    double timeout_sec
 );
 
 Future *traceroute(

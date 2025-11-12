@@ -384,7 +384,7 @@ void *__async_req(void *_args){
     dblevel_push(lg, "__async_req");
     dblog(lg, INFO, "request to %llu (packtype %d)", pack->to_uid, pack->packtype);
 
-    if (pack->packtype != SIGNAL && pack->packtype != SIG_BROADCAST){
+    if (pack->packtype != RESPONSE && pack->packtype != SIGNAL && pack->packtype != SIG_BROADCAST){
         // mtx_lock(&session->usr_waiters_mtx);
         if (!map_in(&session->usr_waiters, &pack->to_uid)){
             dblog(lg, INFO, "initing new waiter");
@@ -520,15 +520,19 @@ Future* request(
     pack->trav_fuid = 0;
     pack->trav_tuid = 0;
 
-    ullong *last_cmuid = NULL;
-    if (map_at(&session->last_c_muids, &to_uid, (void**)&last_cmuid)){
-        pack->cmuid = (packtype != RESPONSE ? (*last_cmuid) + 1: *last_cmuid);
-    } else if (packtype == RESPONSE) {
-        dblog(session->lgr, FATAL, "First packet to request with is RESPONSE");
-        return NULL;
+    if (to_uid != 0){
+        ullong *last_cmuid = NULL;
+        if (map_at(&session->last_c_muids, &to_uid, (void**)&last_cmuid)){
+            pack->cmuid = (packtype != RESPONSE ? (*last_cmuid) + 1: *last_cmuid);
+        } else if (packtype == RESPONSE) {
+            dblog(session->lgr, FATAL, "First packet to request with is RESPONSE");
+            return NULL;
+        } else {
+            pack->cmuid = 0;
+            map_set(&session->last_c_muids, &to_uid, &pack->cmuid);
+        }
     } else {
         pack->cmuid = 0;
-        map_set(&session->last_c_muids, &to_uid, &pack->cmuid);
     }
 
     struct dcn_task *tsk = malloc(sizeof(struct dcn_task));
@@ -544,6 +548,8 @@ void *__async_grequests(void *_args){
     struct dcn_session *session = tsk->session;
     struct allocator *allc = session->client->allc;
     ullong wait_from = tsk->from_uid;
+    double timeout_sec = tsk->timeout_sec;
+    bool has_timeout = timeout_sec >= 0.0;
     struct logger *lg = session->lgr;
     
     dblevel_push(lg, "__async_grequests");
@@ -554,7 +560,20 @@ void *__async_grequests(void *_args){
 
     // misc mode
     if (wait_from == 0){
-        waiter_wait(&session->req_waiter);
+        bool ready = true;
+        if (has_timeout) {
+            ready = waiter_wait_for(&session->req_waiter, timeout_sec);
+        } else {
+            waiter_wait(&session->req_waiter);
+        }
+
+        if (!ready){
+            dblog(lg, WARNING, "waiting for miscellaneous request timed out (%.3fs)", timeout_sec);
+            alc_free(allc, answer_packet);
+            dblevel_pop(lg);
+            free(tsk);
+            return NULL;
+        }
 
         struct map *urs = &session->usr_responses;
         mtx_lock(&urs->_mtx);
@@ -613,7 +632,19 @@ void *__async_grequests(void *_args){
         // mtx_unlock(&session->usr_waiters_mtx);
 
         dblog(lg, INFO, "waiter wait for %llu", wait_from);
-        waiter_wait(waiter->req_waiter);
+        bool ready = true;
+        if (has_timeout) {
+            ready = waiter_wait_for(waiter->req_waiter, timeout_sec);
+        } else {
+            waiter_wait(waiter->req_waiter);
+        }
+        if (!ready){
+            dblog(lg, WARNING, "waiting for request from %llu timed out (%.3fs)", wait_from, timeout_sec);
+            alc_free(allc, answer_packet);
+            dblevel_pop(lg);
+            free(tsk);
+            return NULL;
+        }
         dblog(lg, INFO, "request from %llu received", wait_from);
         
         struct map *urs = &session->usr_responses;
@@ -665,6 +696,7 @@ Future *async_grequests(
     struct grsps_task *task = malloc(sizeof(struct grsps_task));
     task->from_uid = from_uid;
     task->session = session;
+    task->timeout_sec = -1.0;
 
     return async_create(
         session->client->loop,
@@ -675,11 +707,13 @@ Future *async_grequests(
 
 // future -> struct packet * (get request) allc
 Future *async_misc_grequests(
-    struct dcn_session *session
+    struct dcn_session *session,
+    double timeout_sec
 ){
     struct grsps_task *task = malloc(sizeof(struct grsps_task));
     task->from_uid = 0;
     task->session = session;
+    task->timeout_sec = timeout_sec;
 
     return async_create(
         session->client->loop,
@@ -822,6 +856,7 @@ Future *traceroute_ans(
     struct grsps_task *task = alc_malloc(session->client->allc, sizeof(struct grsps_task));
     task->session = session;
     task->from_uid = who_exists;
+    task->timeout_sec = -1.0;
 
     return async_create(
         session->client->loop,

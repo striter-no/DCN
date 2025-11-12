@@ -1,6 +1,7 @@
 #include <asyncio.h>
 #include <stdatomic.h>
 #include <threads.h>
+#include <time.h>
 
 void __coroutine_init(
     struct allocator *allc,
@@ -91,6 +92,50 @@ void waiter_wait(
         cnd_wait(wt->wcond, wt->cmtx);
     }
     mtx_unlock(wt->cmtx);
+}
+
+bool waiter_wait_for(
+    struct waiter *wt,
+    double timeout_seconds
+){
+    if (timeout_seconds < 0.0) {
+        waiter_wait(wt);
+        return true;
+    }
+
+    struct timespec ts;
+#if defined(TIME_UTC)
+    timespec_get(&ts, TIME_UTC);
+#else
+    clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+
+    time_t sec = (time_t)timeout_seconds;
+    long nsec = (long)((timeout_seconds - (double)sec) * 1000000000.0);
+    if (nsec < 0) {
+        nsec = 0;
+    }
+    ts.tv_sec += sec;
+    ts.tv_nsec += nsec;
+    if (ts.tv_nsec >= 1000000000L) {
+        ts.tv_sec += ts.tv_nsec / 1000000000L;
+        ts.tv_nsec %= 1000000000L;
+    }
+
+    bool is_ready = false;
+    mtx_lock(wt->cmtx);
+    while (!atomic_load(&wt->is_ready)){
+        int rc = cnd_timedwait(wt->wcond, wt->cmtx, &ts);
+        if (rc == thrd_timedout) {
+            break;
+        }
+        if (rc != thrd_success) {
+            break;
+        }
+    }
+    is_ready = atomic_load(&wt->is_ready);
+    mtx_unlock(wt->cmtx);
+    return is_ready;
 }
 
 void waiter_free(

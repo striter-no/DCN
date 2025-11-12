@@ -233,24 +233,7 @@ void *dcn_async_worker(void *_args){
     }
     */
 
-    if (!map_at(&serv->dcn_clients, &pack.to_uid, (void**)&to_cli_ptr)){
-        printf(" %llu - no such client\n", pack.to_uid);
-        printf(" answering back to sender with errc 101\n");
-        packet_fill(
-            allc, &answer, 
-            (char*)&(int){101}, sizeof(int)
-        ); // no such client
-
-        struct qblock ansblock;
-        packet_serial(allc, &answer, &ansblock);
-        push_block(&cli->write_q, &ansblock);
-        qblock_free(allc, &ansblock);
-
-        packet_free(allc, &pack);
-        packet_free(allc, &answer);
-        printf("dcn_async_worker exit\n");
-        return NULL;
-    } else {
+    if (pack.to_uid == 0 && (pack.packtype == BROADCAST || pack.packtype == SIG_BROADCAST)){
         printf(" answering back to sender with errc 200\n");
         packet_fill(
             allc, &answer, 
@@ -263,7 +246,40 @@ void *dcn_async_worker(void *_args){
         qblock_free(allc, &_ansblock);
 
         packet_free(allc, &answer);
+    } else {
+        if (!map_at(&serv->dcn_clients, &pack.to_uid, (void**)&to_cli_ptr)){
+            printf(" %llu - no such client\n", pack.to_uid);
+            printf(" answering back to sender with errc 101\n");
+            packet_fill(
+                allc, &answer, 
+                (char*)&(int){101}, sizeof(int)
+            ); // no such client
+    
+            struct qblock ansblock;
+            packet_serial(allc, &answer, &ansblock);
+            push_block(&cli->write_q, &ansblock);
+            qblock_free(allc, &ansblock);
+    
+            packet_free(allc, &pack);
+            packet_free(allc, &answer);
+            printf("dcn_async_worker exit\n");
+            return NULL;
+        } else {
+            printf(" answering back to sender with errc 200\n");
+            packet_fill(
+                allc, &answer, 
+                (char*)&(int){200}, sizeof(int)
+            ); // ok
+    
+            struct qblock _ansblock;
+            packet_serial(allc, &answer, &_ansblock);
+            push_block(&cli->write_q, &_ansblock);
+            qblock_free(allc, &_ansblock);
+    
+            packet_free(allc, &answer);
+        }
     }
+
 
     if (pack.packtype != BROADCAST && pack.packtype != SIG_BROADCAST){
 
@@ -319,7 +335,7 @@ void *dcn_async_worker(void *_args){
         mtx_lock(&serv->dcn_clients._mtx);
         size_t len = serv->dcn_clients.len;
         mtx_unlock(&serv->dcn_clients._mtx);
-
+        printf("starting to broadcast from %llu\n", pack.from_uid);
         for (size_t i = 0; i < len; i++){
             ullong key; 
             if (0 != map_key_at(&serv->dcn_clients, &key, i))
@@ -334,7 +350,7 @@ void *dcn_async_worker(void *_args){
             struct client *to_cli = *to_cli_ptr;
         
             if (to_cli_ptr && *to_cli_ptr) {
-                printf(" Found target client: fd=%d, ip=%s, port=%d\n", 
+                printf(" [brd] Found target client: fd=%d, ip=%s, port=%d\n", 
                     (*to_cli_ptr)->fd, (*to_cli_ptr)->ip, (*to_cli_ptr)->port);
             }
 
@@ -358,12 +374,19 @@ void *dcn_async_worker(void *_args){
                 &ansblock
             );
             
+            if (to_cli->fd == cli->fd) {
+                packet_free(allc, &to_cli_answer);
+                qblock_free(allc, &ansblock);
+                continue;
+            }
+
             if (to_cli->fd > 0) {
                 push_block(&to_cli->write_q, &ansblock);
                 printf(
-                    " message sent (%llu->%llu (%i fd) (#%llu/#%llu) %zu bytes) | queue size: %zu\n", 
+                    " [brd] message sent (%llu->%llu (%i->%i fd) (#%llu/#%llu) %zu bytes) | queue size: %zu\n", 
                     to_cli_answer.from_uid, 
                     to_cli_answer.to_uid, 
+                    cli->fd,
                     to_cli->fd,
                     to_cli_answer.muid,
                     to_cli_answer.cmuid,

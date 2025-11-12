@@ -1,6 +1,7 @@
 #pragma once
 #include "queue.h"
 #include <map.h>
+#include <stdbool.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -70,6 +71,11 @@ void waiter_init(
 
 void waiter_wait(
     struct waiter *wt
+);
+
+bool waiter_wait_for(
+    struct waiter *wt,
+    double timeout_seconds
 );
 
 void waiter_free(
