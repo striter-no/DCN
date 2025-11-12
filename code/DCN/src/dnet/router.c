@@ -13,7 +13,10 @@ void router_init(
 
     router->states   = NULL;
     router->states_n = 0;
+    router->states_cap = 0;
     router->uids = rand();
+
+    atomic_store(&router->is_running, false);
 }
 
 void router_link(
@@ -21,35 +24,61 @@ void router_link(
     char           *serv_ip,
     unsigned short  serv_port
 ){
-    router->states = alc_realloc(
-        router->allc,
-        router->states, 
-        sizeof(struct dnet_state) * (router->states_n + 1)
-    );
-    router->states_n++;
+    if (atomic_load(&router->is_running)) {
+        dblog(router->logger, ERROR, "router_link called while router is running");
+        return;
+    }
 
+    if (router->states_n == router->states_cap) {
+        size_t new_cap = router->states_cap == 0 ? 1 : router->states_cap * 2;
+        router->states = alc_realloc(
+            router->allc,
+            router->states,
+            sizeof(struct dnet_state*) * new_cap
+        );
+        router->states_cap = new_cap;
+    }
+
+    struct dnet_state *state = alc_malloc(router->allc, sizeof(struct dnet_state));
     dnet_state(
-        &router->states[router->states_n - 1],
+        state,
         router->loop,
         router->allc,
         serv_ip,
         serv_port,
         router->uids++
     );
+
+    router->states[router->states_n++] = state;
 }
 
 int __router_runner(void *_args){
-    struct router_task *task       = _args;
-    struct dnet_state  *all_states = task->router->states;
-    size_t num_states              = task->router->states_n;
-
-    struct dnet_state  *mst     = &all_states[task->my_dstate];
+    struct router_task *task   = _args;
+    struct router      *router = task->router;
+    struct logger      *lgr    = router->logger; 
+    
+    struct dnet_state  *mst     = router->states[task->my_dstate];
     struct dcn_session *session = &mst->session;
-    struct allocator   *allc = task->router->allc;
-    struct logger      *lgr  = task->router->logger; 
 
-    while (true){
-        Future *any_req = async_misc_grequests(session, -1.0);
+
+    session->lgr = lgr;
+    dblog(router->logger, INFO, "at %zu dnet_run...", task->my_dstate);
+
+    dnet_run(mst);
+    dblog(router->logger, INFO, "at %zu ping...", task->my_dstate);
+    await(ping(session));
+
+    dblog(router->logger, INFO, "running %zu", task->my_dstate);
+    while (atomic_load(&router->is_running)){
+        size_t num_states = router->states_n;
+        if (task->my_dstate >= num_states){
+            dblog(router->logger, ERROR, "%zu is out of bounds (%zu)", task->my_dstate, num_states);
+            thrd_yield();
+            continue;
+        }
+
+        dblog(router->logger, INFO, "waiting requests");
+        Future *any_req = async_misc_grequests(session, -1.0f);
         struct packet *req_packet = await(any_req);
 
         if (req_packet == NULL){
@@ -64,10 +93,12 @@ int __router_runner(void *_args){
 
         for (size_t i = 0; i < num_states; i++){
             if (i == task->my_dstate) continue;
-            struct dnet_state *tstate = &all_states[i];
+            struct dnet_state *tstate = router->states[i];
             struct dcn_session *tsession = &tstate->session;
 
-            await(request(tsession, req_packet, 0, req_packet->packtype));
+            Future *retr = request(tsession, req_packet, 0, req_packet->packtype);
+            await(retr);
+
             dblog(lgr, INFO, 
                 "  broadcasting #%zu from %s:%i to %s:%i", i, 
                 mst->socket.ip, mst->socket.port,
@@ -76,18 +107,22 @@ int __router_runner(void *_args){
         }
     }
     
-    free(task);
+    alc_free(router->allc, task);
     return thrd_success;
 }
 
 void router_run(struct router *router){
+    atomic_store(&router->is_running, true);
+
     thrd_t *threads = alc_malloc(router->allc, sizeof(thrd_t) * router->states_n);
     
+    dblog(router->logger, INFO, "linked with %zu servers", router->states_n);
     for (size_t i = 0; i < router->states_n; i++){
         struct router_task *task = alc_malloc(router->allc, sizeof(struct router_task));
         task->router = router;
         task->my_dstate = i;
 
+        dblog(router->logger, INFO, " running __router_runner at %zu server", router->states_n);
         thrd_create(
             &threads[i], 
             __router_runner, 
@@ -95,15 +130,24 @@ void router_run(struct router *router){
         );
     }
 
+    dblog(router->logger, INFO, "joining threads");
     for (size_t i = 0; i < router->states_n; i++)
         thrd_join(threads[i], NULL);
 
-    free(threads);
+    alc_free(router->allc, threads);
 }
 
 void router_stop(struct router *router){
-    alc_free(router->allc, router->states);
+    atomic_store(&router->is_running, false);
+    for (size_t i = 0; i < router->states_n; i++){
+        struct dnet_state *state = router->states[i];
+        if (state == NULL) continue;
+        dnet_stop(state);
+        alc_free(router->allc, state);
+    }
     router->states_n = 0;
-    router->states = 0;
+    router->states_cap = 0;
+    alc_free(router->allc, router->states);
+    router->states = NULL;
 }
 

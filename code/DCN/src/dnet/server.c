@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <dnet/server.h>
 #include <stdbool.h>
+#include <time.h>
 
 void __dcn_acceptor(
     struct client *cli,
@@ -152,6 +153,22 @@ void *dcn_async_worker(void *_args){
         pack.muid      // ANSWER Message UID
     );
     answer.cmuid = 0;
+
+    if (pack.to_uid == 0 && pack.packtype == PING){
+        printf(" answering back to sender with errc 200\n");
+        packet_fill(
+            allc, &answer, 
+            (char*)&(int){200}, sizeof(int)
+        ); // ok
+
+        struct qblock _ansblock;
+        packet_serial(allc, &answer, &_ansblock);
+        push_block(&cli->write_q, &_ansblock);
+        qblock_free(allc, &_ansblock);
+
+        packet_free(allc, &answer);
+        return NULL;
+    }
 
     /*
     if (pack.to_uid == 0){

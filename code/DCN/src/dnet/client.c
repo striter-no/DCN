@@ -92,6 +92,7 @@ void *__dcn_on_message(void *_args){
         }
         
         if (pack->packtype != RESPONSE){
+            dblog(session->lgr, INFO, "Setting request waiter [just cuz]");
             waiter_set(&session->req_waiter);
         }
 
@@ -543,6 +544,56 @@ Future* request(
     return async_create(loop, __async_req, tsk);
 }
 
+void *__async_ping(void *_args){
+    struct dcn_task *tsk = _args;
+    struct dcn_session *session = tsk->session;
+    struct packet *pack = tsk->pack;
+
+    dblog(session->lgr, INFO, "__async_ping called");
+    struct allocator *allc = session->client->allc;
+    RESP_CODE rcode;
+    while (true) {
+        struct packet answer;
+        struct waiter *waiter = NULL;
+
+        dblog(session->lgr, INFO, "__async_ping: ping requested");
+        ullong resp_n = dcn_request(session, pack, pack->to_uid, &waiter);
+        dblog(session->lgr, INFO, "__async_ping: awaiting ping");
+        wait_response(session, waiter, resp_n);
+
+        dcn_getresp(session, resp_n, &answer, &rcode);
+        dblog(session->lgr, INFO, "__async_ping: %i", rcode);
+        if (rcode == OK_STATUS){
+            packet_free(allc, &answer);
+            break;
+        }
+
+        packet_free(allc, &answer);
+    }
+
+    packet_free(allc, pack);
+    alc_free(allc, tsk);
+    return NULL;
+}
+
+Future *ping(
+    struct dcn_session *session
+){
+    struct packet *pack = alc_malloc(session->client->allc, sizeof(struct packet));
+    packet_init(session->client->allc, pack, NULL, 0, session->cli_uid, 0, 0);
+    pack->packtype = PING;
+
+    struct dcn_task *tsk = malloc(sizeof(struct dcn_task));
+    tsk->session = session; 
+    tsk->pack = pack;
+
+    return async_create(
+        session->client->loop,
+        __async_ping,
+        tsk
+    );
+}
+
 void *__async_grequests(void *_args){
     struct grsps_task *tsk = _args;
     struct dcn_session *session = tsk->session;
@@ -554,6 +605,7 @@ void *__async_grequests(void *_args){
     
     dblevel_push(lg, "__async_grequests");
     dblog(lg, INFO, "gathering from %i", wait_from);
+    dblog(lg, INFO, "timeout is %f", timeout_sec);
     
     struct packet *answer_packet = alc_calloc(allc, 1, sizeof(struct packet));
     packet_init(allc, answer_packet, NULL, 0, 0, 0, 0);
@@ -610,6 +662,8 @@ void *__async_grequests(void *_args){
 
         // very unlikely
         if (!was_req){
+            dblog(lg, ERROR, "[got \"very unlikely\"] no requests after misc gathering");
+
             alc_free(allc, answer_packet);
             dblevel_pop(lg);
             free(tsk);
@@ -685,6 +739,11 @@ void *__async_grequests(void *_args){
 
     dblevel_pop(lg);
     free(tsk);
+    
+    if (answer_packet == NULL){
+        dblog(lg, ERROR, "answer packet is NULL");
+    }
+
     return (void*)answer_packet; // return received struct packet * (allocated)
 }
 

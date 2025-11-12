@@ -3,7 +3,9 @@
 #include <dnet/server.h>
 
 
-int main(){
+int main(int argc, char *argv[]){
+    unsigned short PORT = atoi(argv[1]);
+
     atomic_bool is_running = true;
     struct ev_loop loop;
     struct allocator allc;
@@ -12,7 +14,7 @@ int main(){
 
     struct dcn_server serv;
     struct ssocket_md socket;
-    if (screate_socket(&socket, "127.0.0.1", 9000) != 0){
+    if (screate_socket(&socket, "127.0.0.1", PORT) != 0){
         fprintf(stderr, "cannot create socket: %s\n", strerror(errno));
         return -1;
     }

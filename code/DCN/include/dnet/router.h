@@ -7,9 +7,12 @@ struct router {
     struct allocator *allc;
     struct logger    *logger;
 
-    struct dnet_state *states;
+    struct dnet_state **states;
     size_t states_n;
+    size_t states_cap;
     ullong uids;
+
+    atomic_bool is_running;
 };
 
 struct router_task {

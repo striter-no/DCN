@@ -91,6 +91,7 @@ void waiter_wait(
     while (!atomic_load(&wt->is_ready)){
         cnd_wait(wt->wcond, wt->cmtx);
     }
+    atomic_store(&wt->is_ready, false);
     mtx_unlock(wt->cmtx);
 }
 
@@ -134,6 +135,9 @@ bool waiter_wait_for(
         }
     }
     is_ready = atomic_load(&wt->is_ready);
+    if (is_ready) {
+        atomic_store(&wt->is_ready, false);
+    }
     mtx_unlock(wt->cmtx);
     return is_ready;
 }
@@ -241,11 +245,18 @@ void *await(Future *fut){
     
     struct allocator *allc = fut->pool ? fut->pool->allc : NULL;
     if (allc == NULL) {
+        fprintf(stderr, "[error] in await (from asyncio) - allocator is NULL\n");
         return NULL;
     }
     await_future(fut, &out);
     
-    if (out.dsize != sizeof(void*) || out.data == NULL) {
+    if (out.data == NULL) {
+        qblock_free(allc, &out);
+        return NULL;
+    }
+
+    if (out.dsize != sizeof(void*)) {
+        fprintf(stderr, "[warning] in await (from asyncio) - out.dsize (%zu) is invalid\n", out.dsize);
         qblock_free(allc, &out);
         return NULL;
     }

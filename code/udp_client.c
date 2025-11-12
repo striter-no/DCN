@@ -9,7 +9,8 @@
 int main(int argc, char *argv[]){
 
     ullong MY_UID = atoll(argv[1]);
-    double timeout_sec = argc > 2 ? atof(argv[2]) : 5.0;
+    int PORT   = atoi(argv[2]);
+    double timeout_sec = argc > 3 ? atof(argv[3]) : 5.0;
 
     struct ev_loop loop;
     struct allocator allc;
@@ -18,7 +19,7 @@ int main(int argc, char *argv[]){
     loop_run(&loop);
 
     struct dnet_state state;
-    dnet_state(&state, &loop, &allc, "127.0.0.1", 9000, MY_UID);
+    dnet_state(&state, &loop, &allc, "127.0.0.1", PORT, MY_UID);
     
     dnet_run(&state);
 

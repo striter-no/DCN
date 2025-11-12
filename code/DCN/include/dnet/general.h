@@ -9,7 +9,8 @@ typedef enum {
     SIGNAL,
     BROADCAST,
     SIG_BROADCAST,
-    TRACEROUTE
+    TRACEROUTE,
+    PING
 } PACKET_TYPE;
 
 struct packet {

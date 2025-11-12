@@ -206,6 +206,10 @@ Future *async_grequests(
     ullong from_uid
 );
 
+Future *ping(
+    struct dcn_session *session
+);
+
 // get any incoming request
 Future *async_misc_grequests(
     struct dcn_session *session,
