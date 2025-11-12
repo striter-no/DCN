@@ -384,6 +384,7 @@ void *dcn_async_worker(void *_args){
             to_cli_answer.from_os = true;
             to_cli_answer.cmuid = pack.cmuid;
             to_cli_answer.packtype = pack.packtype;
+            to_cli_answer.trav_fuid = pack.trav_fuid;
             packet_free(allc, &pack);
             packet_serial(
                 allc, 
@@ -400,7 +401,7 @@ void *dcn_async_worker(void *_args){
             if (to_cli->fd > 0) {
                 push_block(&to_cli->write_q, &ansblock);
                 printf(
-                    " [brd] message sent (%llu->%llu (%i->%i fd) (#%llu/#%llu) %zu bytes) | queue size: %zu\n", 
+                    " [brd] message sent (%llu->%llu (%i->%i fd) (#%llu/#%llu) %zu bytes) | trav_fuid: %llu | queue size: %zu\n", 
                     to_cli_answer.from_uid, 
                     to_cli_answer.to_uid, 
                     cli->fd,
@@ -408,6 +409,7 @@ void *dcn_async_worker(void *_args){
                     to_cli_answer.muid,
                     to_cli_answer.cmuid,
                     to_cli_answer.data.dsize,
+                    to_cli_answer.trav_fuid,
                     to_cli->write_q.bsize
                 );
             } else {

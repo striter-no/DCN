@@ -14,6 +14,8 @@ void router_init(
     router->states   = NULL;
     router->states_n = 0;
     router->states_cap = 0;
+
+    srand(time(NULL));
     router->uids = rand();
 
     atomic_store(&router->is_running, false);
@@ -88,23 +90,43 @@ int __router_runner(void *_args){
 
         if (!(req_packet->packtype == SIG_BROADCAST)){
             dblog(lgr, ERROR, "Incoming request is not sig-broadcast: %i", req_packet->packtype);
+            packet_free(session->client->allc, req_packet);
+            alc_free(session->client->allc, req_packet);
             continue;
         }
+
+        ullong orig_trav_fuid = req_packet->trav_fuid == 0 ? req_packet->from_uid : req_packet->trav_fuid;
 
         for (size_t i = 0; i < num_states; i++){
             if (i == task->my_dstate) continue;
             struct dnet_state *tstate = router->states[i];
             struct dcn_session *tsession = &tstate->session;
 
-            Future *retr = request(tsession, req_packet, 0, req_packet->packtype);
+            struct packet *packet_copy = copy_packet(session->client->allc, req_packet);
+
+            Future *retr = request(
+                tsession, 
+                packet_copy, 
+                0, 
+                orig_trav_fuid, 
+                req_packet->packtype
+            );
             await(retr);
+            
+            // For signals, request() doesn't free the packet, so we need to free it here
+            packet_free(session->client->allc, packet_copy);
+            alc_free(session->client->allc, packet_copy);
 
             dblog(lgr, INFO, 
-                "  broadcasting #%zu from %s:%i to %s:%i", i, 
+                "  broadcasting #%zu from %s:%i to %s:%i (from %llu)", i, 
                 mst->socket.ip, mst->socket.port,
-                tstate->socket.ip, tstate->socket.port
+                tstate->socket.ip, tstate->socket.port,
+                orig_trav_fuid
             );
         }
+
+        packet_free(session->client->allc, req_packet);
+        alc_free(session->client->allc, req_packet);
     }
     
     alc_free(router->allc, task);

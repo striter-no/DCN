@@ -511,6 +511,7 @@ Future* request(
     struct dcn_session *session,
     struct packet *pack,
     ullong to_uid,
+    ullong trv_fuid,
     PACKET_TYPE packtype
 ){
     pack->from_uid = session->cli_uid;
@@ -518,7 +519,7 @@ Future* request(
     pack->to_uid   = to_uid;
     pack->muid     = 0;
     pack->packtype = packtype;
-    pack->trav_fuid = 0;
+    pack->trav_fuid = trv_fuid;
     pack->trav_tuid = 0;
 
     if (to_uid != 0){

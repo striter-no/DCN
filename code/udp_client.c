@@ -29,12 +29,12 @@ int main(int argc, char *argv[]){
     packet_templ(&allc, &echopack, "Hello echo", 11);
 
     struct packet *req_packet;
-    await(request(session, &pack, 0, SIG_BROADCAST));
+    await(request(session, &pack, 0, 0, SIG_BROADCAST));
     req_packet = await(async_misc_grequests(session, timeout_sec));
-    await(request(session, &pack, 0, SIG_BROADCAST));
+    await(request(session, &pack, 0, 0, SIG_BROADCAST));
 
     if (req_packet != NULL){
-        printf("got incoming request (%zu bytes): %s\n", req_packet->data.dsize, req_packet->data.data);
+        printf("got incoming request (%zu bytes): %s (from %llu)\n", req_packet->data.dsize, req_packet->data.data, req_packet->trav_fuid);
         packet_free(&allc, req_packet);
     
     } else 
