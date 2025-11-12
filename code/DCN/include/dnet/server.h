@@ -66,6 +66,8 @@ struct dcn_server {
 	*/
 
 	struct array trace_requests;
+	// ullong (tr_uid): short (0 - no answer 1 - success 2 - failure)
+	struct map   pending_tr_requests;
 };
 
 void dcn_serv_init(

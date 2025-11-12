@@ -331,6 +331,8 @@ bool dcn_getresp(
             pack->from_os  = src->from_os;
             pack->packtype = src->packtype;
             pack->muid     = src->muid;
+            pack->trav_fuid     = src->trav_fuid;
+            pack->trav_tuid     = src->trav_tuid;
             qblock_init(&pack->data);
             qblock_copy(session->client->allc, &pack->data, &src->data);
             
@@ -354,7 +356,7 @@ bool dcn_getresp(
             } else {
                 *rcode = FROM_USER; // 1
             }
-
+            
             return true;
         }
     }
@@ -515,6 +517,8 @@ Future* request(
     pack->to_uid   = to_uid;
     pack->muid     = 0;
     pack->packtype = packtype;
+    pack->trav_fuid = 0;
+    pack->trav_tuid = 0;
 
     ullong *last_cmuid = NULL;
     if (map_at(&session->last_c_muids, &to_uid, (void**)&last_cmuid)){

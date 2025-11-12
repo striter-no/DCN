@@ -78,6 +78,8 @@ void packet_free(
     pack->to_uid     = 0;
     pack->muid       = 0;
     pack->cmuid      = 0;
+    pack->trav_fuid  = 0;
+    pack->trav_tuid  = 0;
     pack->packtype   = REQUEST;
     pack->from_os    = false;
 }
@@ -101,6 +103,8 @@ void packet_init(
     pack->from_os  = false;
     pack->packtype = REQUEST;
     pack->cmuid      = 0;
+    pack->trav_fuid  = 0;
+    pack->trav_tuid  = 0;
 }
 
 void qpacket_init(
@@ -121,6 +125,8 @@ void qpacket_init(
     pack->muid     = muid;
     pack->packtype = REQUEST;
     pack->cmuid      = 0;
+    pack->trav_fuid  = 0;
+    pack->trav_tuid  = 0;
 }
 
 void packet_fill(
@@ -150,6 +156,8 @@ struct packet *copy_packet(struct allocator *allc, const struct packet *src) {
     dest->packtype = src->packtype;
     dest->from_os  = src->from_os;
     dest->cmuid    = src->cmuid;
+    dest->trav_fuid  = src->trav_fuid;
+    dest->trav_tuid  = src->trav_tuid;
     
     qblock_init(&dest->data);
     qblock_copy(allc, &dest->data, &src->data);

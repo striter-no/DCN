@@ -23,7 +23,7 @@ void __dcn_disconnector(
         printf("[unregistered] disconnected %s:%i\n", cli->ip, cli->port);
     }
 }
-
+/*
 void traceroute(
     struct dcn_server *server,
     struct client *from,
@@ -71,6 +71,7 @@ void traceroute(
         packet_free(server->allc, &trp);
     }
 }
+*/
 
 void *dcn_async_worker(void *_args){
     printf("dcn_async_worker entry\n");
@@ -152,6 +153,7 @@ void *dcn_async_worker(void *_args){
     );
     answer.cmuid = 0;
 
+    /*
     if (pack.to_uid == 0){
         if (pack.packtype != TRACEROUTE){
             printf(" to_uid == 0 and packtype == %i -> forbidden\n", pack.packtype);
@@ -222,11 +224,14 @@ void *dcn_async_worker(void *_args){
                 &trp_data.req_uid
             );
             traceroute(serv, cli, trp_data.req_uid);
+            
+            // TODO: answer to client
             mtx_unlock(&serv->trace_requests._mtx);
         }
 
         return NULL;
     }
+    */
 
     if (!map_at(&serv->dcn_clients, &pack.to_uid, (void**)&to_cli_ptr)){
         printf(" %llu - no such client\n", pack.to_uid);
@@ -401,6 +406,12 @@ void dcn_serv_init(
         sizeof(ullong),
         sizeof(ullong)
     );
+
+    map_init(
+        &serv->pending_tr_requests,
+        sizeof(ullong),
+        sizeof(short)
+    );
 }
 
 void dcn_serv_stop(
@@ -409,6 +420,8 @@ void dcn_serv_stop(
     // all clients are freed in epldplx server
     map_free(&serv->dcn_clients);
     map_free(&serv->dcn_sessions);
+
+    map_free(&serv->pending_tr_requests);
 }
 
 void dcn_serv_run(

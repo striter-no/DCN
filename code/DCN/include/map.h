@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include <threads.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 struct map {
     void *keys;
