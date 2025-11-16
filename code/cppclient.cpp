@@ -1,50 +1,37 @@
-#include <asyncio.h>
-#include <allocator.h>
-#include <dnet/client.h>
 #include <dnet/general.h>
-#include <logger.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <iostream>
+#include <zlutils.hpp>
+#include <xdnet/client.hpp>
 
 int main(int argc, char *argv[]){
 
     ullong MY_UID = atoll(argv[1]);
-    int PORT   = atoi(argv[2]);
-    double timeout_sec = argc > 3 ? atof(argv[3]) : 5.0;
+    int    PORT   = atoi(argv[2]);
+    double timeout_sec = argc > 3 ? atof(argv[3]) : -1;
 
-    struct ev_loop loop;
-    struct allocator allc;
-    allocator_init(&allc);
-    loop_create(&allc, &loop, 3);
-    loop_run(&loop);
+    zl::Allocator allc;
+    zl::EventLoop loop(allc, 3);
+    loop.run();
 
-    struct dnet_state state;
-    dnet_state(&state, &loop, &allc, "127.0.0.1", PORT, MY_UID);
+    xdnet::DClient client(&loop, &allc, "127.0.0.1", PORT, MY_UID);
+    client.run();
+
+    xdnet::Packet pack(allc, "Hello"), echo_pack(allc, "Echo hello");
+
+    zl::Future grf = client.misc_gather(timeout_sec);
+    zl::Future rf  = client.make_request(pack, 0, SIG_BROADCAST);
+    xdnet::Packet reqpack = {allc, grf.wait<xdnet::CPack>()};
     
-    dnet_run(&state);
+    if (!reqpack){
+        std::cout << "no incoming requests" << std::endl;
+    } else {
+        std::cout << "Got incoming request: " << reqpack.to_string() << std::endl;
+        client.make_request(echo_pack, 0, SIG_BROADCAST).wait<void*>();
+        reqpack.cleanup();
+    }
 
-    struct dcn_session *session = &state.session;
-    struct packet pack, echopack;
-    packet_templ(&allc, &pack, "Hello", 6);
-    packet_templ(&allc, &echopack, "Hello echo", 11);
+    echo_pack.cleanup();
+    pack.cleanup();
 
-    struct packet *req_packet;
-    Future *grf = async_misc_grequests(session, timeout_sec);
-    // await(request(session, &pack, 0, 0, SIG_BROADCAST));
-    Future *rf = request(session, &pack, 0, 0, SIG_BROADCAST);
-    req_packet = static_cast<struct packet*>(await(grf));
-    
-    if (req_packet != NULL){
-        printf("got incoming request (%zu bytes): %s (from %llu)\n", req_packet->data.dsize, req_packet->data.data, req_packet->trav_fuid);
-        packet_free(&allc, req_packet);
-        await(request(session, &echopack, 0, 0, SIG_BROADCAST));
-    } else 
-        printf("no incoming requests\n");
-
-    await(rf);
-
-
-    dnet_stop(&state);
-    loop_stop(&loop);
-    allocator_end(&allc);
+    rf.wait<void*>();
 }

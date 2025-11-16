@@ -14,7 +14,6 @@ extern "C" {
 #include <threads.h>
 #include <unistd.h>
 
-typedef struct future Future;
 #define asyncdef void *
 typedef unsigned long long ullong;
 
@@ -148,13 +147,13 @@ void loop_run(struct ev_loop *loop);
 void loop_stop(struct ev_loop *loop);
 
 
-Future *asyncio_sleep(
+struct future *asyncio_sleep(
     struct ev_loop *loop,
     float seconds
 );
 
 void **asyncio_gather(
-    Future **futures,
+    struct future **futures,
     size_t fut_sz
 );
 

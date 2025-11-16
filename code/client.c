@@ -38,11 +38,11 @@ int main(int argc, char *argv[]){
     // and get incoming request
     dblog(&lgr, INFO, "sending request");
     struct packet *req_packet;
-    Future *resp = request(session, &pack /*data to send*/, TO_UID, BROADCAST);
+    struct future *resp = request(session, &pack /*data to send*/, TO_UID, BROADCAST);
 
     dblog(&lgr, INFO, "gathering request");
     // ... add wait untill async_grequests(..., bool wait_for);
-    Future *req  = async_grequests(session, TO_UID);
+    struct future *req  = async_grequests(session, TO_UID);
     dblog(&lgr, INFO, "awaiting requests");
     req_packet = await(req);
 

@@ -198,7 +198,7 @@ void wait_response(
 
 
 // send smth and get response
-Future* request(
+struct future* request(
     struct dcn_session *session,
     struct packet *pack,
     ullong to_uid,
@@ -207,32 +207,32 @@ Future* request(
 );
 
 // get incoming requests from uid
-Future *async_grequests(
+struct future *async_grequests(
     struct dcn_session *session,
     ullong from_uid
 );
 
-Future *ping(
+struct future *ping(
     struct dcn_session *session
 );
 
 // get any incoming request
-Future *async_misc_grequests(
+struct future *async_misc_grequests(
     struct dcn_session *session,
     double timeout_sec
 );
 
-Future *traceroute(
+struct future *traceroute(
     struct dcn_session *session,
     ullong uid_ttr
 );
 
-Future *traceroute_ans(
+struct future *traceroute_ans(
     struct dcn_session *session,
     ullong who_exists
 );
 
-Future *async_gtraceroutes(
+struct future *async_gtraceroutes(
     struct dcn_session *session
 );
 

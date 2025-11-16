@@ -1,5 +1,7 @@
 #pragma once
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #define MAX_BUFFER_SIZE 1024
 
 #include <atomic_wrapper.h>

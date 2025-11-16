@@ -508,7 +508,7 @@ void *__async_req(void *_args){
 }
 
 // future -> struct packet * (get response) allc
-Future* request(
+struct future* request(
     struct dcn_session *session,
     struct packet *pack,
     ullong to_uid,
@@ -578,7 +578,7 @@ void *__async_ping(void *_args){
     return NULL;
 }
 
-Future *ping(
+struct future *ping(
     struct dcn_session *session
 ){
     struct packet *pack = alc_malloc(session->client->allc, sizeof(struct packet));
@@ -750,7 +750,7 @@ void *__async_grequests(void *_args){
 }
 
 // future -> struct packet * (get request) allc
-Future *async_grequests(
+struct future *async_grequests(
     struct dcn_session *session,
     ullong from_uid
 ){
@@ -767,7 +767,7 @@ Future *async_grequests(
 }
 
 // future -> struct packet * (get request) allc
-Future *async_misc_grequests(
+struct future *async_misc_grequests(
     struct dcn_session *session,
     double timeout_sec
 ){
@@ -815,7 +815,7 @@ void *__async_traceroute(void *_args){
 }
 
 // future -> struct trp_data* (allc)
-Future *traceroute(
+struct future *traceroute(
     struct dcn_session *session,
     ullong uid_ttr
 ){
@@ -867,7 +867,7 @@ void *__async_gtraceroutes(void *_args){
 }
 
 // future -> struct trp_data * (allocated/allc)
-Future *async_gtraceroutes(
+struct future *async_gtraceroutes(
     struct dcn_session *session
 ){
     return async_create(
@@ -910,7 +910,7 @@ void *__async_traceroute_ans(void *_args){
 }
 
 // future -> bool* (allc)
-Future *traceroute_ans(
+struct future *traceroute_ans(
     struct dcn_session *session,
     ullong who_exists
 ){

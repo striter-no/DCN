@@ -7,6 +7,7 @@ void __dcn_acceptor(
     struct client *cli,
     void *state
 ){
+    (void)state;
     printf("new client: %s:%i\n", cli->ip, cli->port);
 }
 

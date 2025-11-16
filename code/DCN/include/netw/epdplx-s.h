@@ -1,6 +1,8 @@
 #define MAX_BUFFER_SIZE  1024
 #define MAX_EPOLL_EVENTS 64
-#define _GNU_SOURCE // for accept4
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif // for accept4
 
 #include <atomic_wrapper.h>
 #include <asyncio.h>

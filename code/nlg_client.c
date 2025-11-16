@@ -27,9 +27,9 @@ int main(int argc, char *argv[]){
     packet_templ(&allc, &echopack, "Hello echo", 11);
 
     struct packet *req_packet;
-    Future *resp = request(session, &pack /*data to send*/, TO_UID, BROADCAST);
+    struct future *resp = request(session, &pack /*data to send*/, TO_UID, BROADCAST);
 
-    Future *req  = async_grequests(session, TO_UID);
+    struct future *req  = async_grequests(session, TO_UID);
     req_packet = await(req);
 
     if (req_packet != NULL){

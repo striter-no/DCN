@@ -81,7 +81,7 @@ int __router_runner(void *_args){
         }
 
         dblog(router->logger, INFO, "waiting requests");
-        Future *any_req = async_misc_grequests(session, -1.0f);
+        struct future *any_req = async_misc_grequests(session, -1.0f);
         struct packet *req_packet = await(any_req);
 
         if (req_packet == NULL){
@@ -105,7 +105,7 @@ int __router_runner(void *_args){
 
             struct packet *packet_copy = copy_packet(session->client->allc, req_packet);
 
-            Future *retr = request(
+            struct future *retr = request(
                 tsession, 
                 packet_copy, 
                 0, 

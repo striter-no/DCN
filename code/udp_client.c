@@ -29,9 +29,9 @@ int main(int argc, char *argv[]){
     packet_templ(&allc, &echopack, "Hello echo", 11);
 
     struct packet *req_packet;
-    Future *grf = async_misc_grequests(session, timeout_sec);
+    struct future *grf = async_misc_grequests(session, timeout_sec);
     // await(request(session, &pack, 0, 0, SIG_BROADCAST));
-    Future *rf = request(session, &pack, 0, 0, SIG_BROADCAST);
+    struct future *rf = request(session, &pack, 0, 0, SIG_BROADCAST);
     req_packet = await(grf);
     
     if (req_packet != NULL){

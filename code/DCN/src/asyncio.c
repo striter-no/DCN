@@ -221,7 +221,7 @@ void asyncio_remevent(
 
 
 // async function can return pointer to smth
-Future *async_create(
+struct future *async_create(
     struct ev_loop *loop,
     void *(*worker)(void *args),
     void *args
@@ -229,7 +229,7 @@ Future *async_create(
     struct coroutine *crt = malloc(sizeof(struct coroutine));
     __coroutine_init(loop->allc, crt, worker, args);
 
-    Future *fut = alc_malloc(loop->allc, sizeof(Future));
+    struct future *fut = alc_malloc(loop->allc, sizeof(struct future));
     gnr_pool_sumbit(
         &loop->working_pool, 
         &crt, 
@@ -240,7 +240,7 @@ Future *async_create(
     return fut;
 }
 
-void *await(Future *fut){
+void *await(struct future *fut){
     struct qblock out;
     // save allocator before await_future frees fut (sets fut->pool to NULL)
     
@@ -418,7 +418,7 @@ void *__async_sleep_worker(void *args){
     return NULL;
 }
 
-Future *asyncio_sleep(
+struct future *asyncio_sleep(
     struct ev_loop *loop,
     float _seconds
 ){
@@ -432,7 +432,7 @@ Future *asyncio_sleep(
 }
 
 void **asyncio_gather(
-    Future **futures,
+    struct future **futures,
     size_t fut_sz
 ){
     void **results = malloc(fut_sz * sizeof(void *));

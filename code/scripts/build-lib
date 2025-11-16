@@ -19,12 +19,22 @@ mkdir -p ./build
 cd ./build
 rm -rf ./*.o
 
+echo "C compiling";
 for file in $(find ../code/DCN/src -type f -name "*.c"); do
     base=$(basename "$file" .c)
     dirname=$(dirname "$file")
     subdir=$(basename "$dirname")
     echo "compiling to ${subdir}_${base}.o ..."
     $CC $CFLAGS -c "$file" -I $CINCL -L $CLIB $LIBS -o "${subdir}_${base}.o"
+done
+
+echo "CXX compiling...";
+for file in $(find ../code/DCN/src -type f -name "*.cpp"); do
+    base=$(basename "$file" .cpp)
+    dirname=$(dirname "$file")
+    subdir=$(basename "$dirname")
+    echo "compiling to cxx_${subdir}_${base}.o ..."
+    $CXX $CFLAGS -c "$file" -I $CINCL -L $CLIB $LIBS -o "cxx_${subdir}_${base}.o"
 done
 
 $CXX $CFLAGS -c ../code/"$EXEC_NAME".cpp -I $CINCL -L $CLIB $LIBS
