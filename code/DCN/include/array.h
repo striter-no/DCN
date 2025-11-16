@@ -1,8 +1,14 @@
 #pragma once
+#include <queue.h>
+
 #define ARRAY_HEAD_STEP 10
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <string.h>
 #include <stdlib.h>
-#include <queue.h>
 
 struct array {
     void *blocks;
@@ -24,3 +30,7 @@ size_t array_index(struct array *arr, void *block);
 int array_append(struct array *arr, void *block);
 int array_at(struct array *arr, void **out, size_t inx);
 int array_copy_at(struct array *arr, void *out, size_t inx);
+
+#ifdef __cplusplus
+}
+#endif

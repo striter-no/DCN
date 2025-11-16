@@ -6,6 +6,10 @@
 #include <asyncio.h>
 #include <array.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
 How it works
 
@@ -45,7 +49,7 @@ Tunneling:
 */
 
 struct dcn_server {
-	atomic_bool *is_running;
+	ATOMIC_BOOL *is_running;
 	struct allocator *allc;
 
 	struct ev_loop   *loop;
@@ -68,6 +72,8 @@ struct dcn_server {
 	struct array trace_requests;
 	// ullong (tr_uid): short (0 - no answer 1 - success 2 - failure)
 	struct map   pending_tr_requests;
+
+	int epfd;
 };
 
 void dcn_serv_init(
@@ -75,7 +81,7 @@ void dcn_serv_init(
 	struct dcn_server *serv,
 	struct ev_loop    *loop,
 	struct ssocket_md  *sock,
-	atomic_bool *is_running
+	ATOMIC_BOOL *is_running
 );
 
 void dcn_serv_stop(
@@ -85,3 +91,7 @@ void dcn_serv_stop(
 void dcn_serv_run(
 	struct dcn_server *serv
 );
+
+#ifdef __cplusplus
+}
+#endif

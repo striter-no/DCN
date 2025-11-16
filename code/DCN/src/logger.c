@@ -1,6 +1,7 @@
 #include <logger.h>
 #include <stdarg.h>
 
+
 void logger_init(
     struct logger *log, 
     FILE *output
@@ -159,3 +160,8 @@ void dblevel_pop(
         dblog(log, INFO, "pop lvl");
     }
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

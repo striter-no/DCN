@@ -3,6 +3,7 @@
 #include <map.h>
 #include <math.h>
 
+
 void __print_buffer(
     char *buffer,
     size_t size
@@ -329,3 +330,8 @@ void map_clear(struct map *map){
     map->values = NULL;
     mtx_unlock(&map->_mtx);
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

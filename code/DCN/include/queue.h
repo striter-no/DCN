@@ -1,9 +1,14 @@
 #pragma once
+#include <allocator.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
 #include <stdbool.h>
-#include <allocator.h>
 
 #define QUEUE_HEAD_STEP 5
 
@@ -40,3 +45,7 @@ void generic_qbfill(struct allocator *allc, struct qblock *out, void *data, size
 void generic_qbout(struct qblock *inp, void *out, size_t data_size);
 
 bool queue_forward(struct queue *to, struct queue *from, bool peek);
+
+#ifdef __cplusplus
+}
+#endif

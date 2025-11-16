@@ -32,7 +32,7 @@ int main(int argc, char *argv[]){
     Future *grf = async_misc_grequests(session, timeout_sec);
     // await(request(session, &pack, 0, 0, SIG_BROADCAST));
     Future *rf = request(session, &pack, 0, 0, SIG_BROADCAST);
-    req_packet = await(grf);
+    req_packet = static_cast<struct packet*>(await(grf));
     
     if (req_packet != NULL){
         printf("got incoming request (%zu bytes): %s (from %llu)\n", req_packet->data.dsize, req_packet->data.data, req_packet->trav_fuid);

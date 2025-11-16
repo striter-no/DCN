@@ -1,6 +1,7 @@
 #include <dnet/router.h>
 #include <threads.h>
 
+
 void router_init(
     struct ev_loop   *loop,
     struct allocator *allc,
@@ -172,4 +173,8 @@ void router_stop(struct router *router){
     alc_free(router->allc, router->states);
     router->states = NULL;
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
 

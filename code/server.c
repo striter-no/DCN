@@ -6,7 +6,7 @@
 int main(int argc, char *argv[]){
     unsigned short PORT = atoi(argv[1]);
 
-    atomic_bool is_running = true;
+    ATOMIC_BOOL is_running = true;
     struct ev_loop loop;
     struct allocator allc;
 

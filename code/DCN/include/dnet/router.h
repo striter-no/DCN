@@ -2,6 +2,10 @@
 #include <dnet/server.h>
 #include <dnet/client.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct router {
     struct ev_loop   *loop;
     struct allocator *allc;
@@ -12,7 +16,7 @@ struct router {
     size_t states_cap;
     ullong uids;
 
-    atomic_bool is_running;
+    ATOMIC_BOOL is_running;
 };
 
 struct router_task {
@@ -35,3 +39,7 @@ void router_link(
 
 void router_stop(struct router *router);
 void router_run(struct router  *router);
+
+#ifdef __cplusplus
+}
+#endif

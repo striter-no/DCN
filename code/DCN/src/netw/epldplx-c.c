@@ -1,6 +1,7 @@
 #include <netw/epdplx-s.h>
 #include <dnet/general.h>
 
+
 int screate_socket(
     struct ssocket_md *smd,
     char *ip,
@@ -165,7 +166,7 @@ int accept_client(
     *cli_out = client;
 
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, cli_md->fd, &(struct epoll_event){
-        .events = EPOLLIN | EPOLLOUT,
+        .events = EPOLLIN, // | EPOLLOUT
         .data.ptr = client
     }) < 0){
         close(client->fd);
@@ -203,21 +204,31 @@ int close_client(struct allocator *allc, int epfd, struct client *cli){
     return 0;
 }
 
+int change_climod(int epfd, struct client *cli, int mode){
+    return epoll_ctl(
+        epfd, EPOLL_CTL_MOD, 
+        cli->fd, &(struct epoll_event){
+            .events = mode == 0? EPOLLIN: EPOLLOUT,
+            .data.ptr = cli
+        }
+    );
+}
+
 int run_server(
     struct allocator *allc,
     struct ssocket_md *server,
     struct ev_loop   *loop,
-    atomic_bool *is_running,
+    ATOMIC_BOOL *is_running,
     void *(*async_worker)(void *),
     void (*custom_acceptor)(struct client *cli, void *state_holder),
     void (*custom_disconnector)(struct client *cli, void *state_holder),
-    void *state_holder
+    void *state_holder,
+    int *epfd
 ){
-    int epfd;
-    ep_init(&epfd);
+    ep_init(epfd);
     struct epoll_event events[MAX_EPOLL_EVENTS];
     
-    int ret = serv_start(server, epfd, 8);
+    int ret = serv_start(server, (*epfd), 8);
     if (ret != 0){
         fprintf(stderr, "cannot bind server: %s\n", strerror(errno));
         return ret;
@@ -227,7 +238,7 @@ int run_server(
         // -1 means to stop the loop if no events
         // you need actual timeout if you want to skip 
         // this loop while no data is available
-        int av_num = epoll_wait(epfd, events, MAX_EPOLL_EVENTS, -1);
+        int av_num = epoll_wait((*epfd), events, MAX_EPOLL_EVENTS, -1);
 
         for (int i = 0; i < av_num; i++){
             struct epoll_event ev = events[i];
@@ -235,7 +246,7 @@ int run_server(
             if (ev.data.ptr == NULL){
                 struct client *ptr = NULL;
                 struct ssocket_md cli_md;
-                ret = accept_client(allc, server, epfd, &cli_md, &ptr);
+                ret = accept_client(allc, server, (*epfd), &cli_md, &ptr);
                 
                 if (ret != 0){
                     fprintf(stderr, "cannot accept client: %s\n", strerror(errno));
@@ -248,7 +259,7 @@ int run_server(
 
                 if (ev.events & (EPOLLHUP | EPOLLERR)) {
                     custom_disconnector(cli, state_holder);
-                    close_client(allc, epfd, cli);
+                    close_client(allc, (*epfd), cli);
                     continue;
                 }
                 
@@ -259,7 +270,7 @@ int run_server(
                     ret = nbep_read(cli->fd, &r_buff, &r_size);
                     if (ret == -3 || ret == -4){
                         custom_disconnector(cli, state_holder);
-                        close_client(allc, epfd, cli);
+                        close_client(allc, (*epfd), cli);
                         continue;
                     }
 
@@ -328,21 +339,15 @@ int run_server(
                         if (ret == 0){
                             cli->alr_written = 0;
                             //  2 == no blocks left
-                            // if (2 == pop_block(&cli->write_q, NULL) && epoll_ctl(
-                            //     epfd, EPOLL_CTL_MOD, 
-                            //     cli->fd, &(struct epoll_event){
-                            //         .events = EPOLLIN,
-                            //         .data.ptr = cli
-                            //     }
-                            // ) < 0){
-                            //     atomic_store(is_running, false);
-                            //     fprintf(
-                            //         stderr, 
-                            //         "[epoll][error] while epollout/full write: %s\n", strerror(errno)
-                            //     );
-                            //     break;
-                            // }
-                            pop_block(&cli->write_q, NULL);
+                            if (2 == pop_block(&cli->write_q, NULL) && 0 != change_climod(*epfd, cli, 0)){
+                                atomic_store(is_running, false);
+                                fprintf(
+                                    stderr, 
+                                    "[epoll][error] while epollout/full write: %s\n", strerror(errno)
+                                );
+                                break;
+                            }
+                            // pop_block(&cli->write_q, NULL);
                         }
 
                         qblock_free(allc, &block);
@@ -355,3 +360,8 @@ int run_server(
     }
     return 0;
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

@@ -1,21 +1,24 @@
+#define MAX_BUFFER_SIZE  1024
+#define MAX_EPOLL_EVENTS 64
 #define _GNU_SOURCE // for accept4
-#include <stdbool.h>
-#include <stdatomic.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 
+#include <atomic_wrapper.h>
 #include <asyncio.h>
 #include <queue.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdbool.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/epoll.h>
 #include <errno.h>
-
-#define MAX_BUFFER_SIZE  1024
-#define MAX_EPOLL_EVENTS 64
-
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+    
 struct client {
     int fd;
     struct queue read_q;
@@ -82,15 +85,28 @@ int accept_client(
     struct client **cli_out
 );
 
+// mode: 0 ->  INPUT
+// mode: 1 -> OUTPUT
+int change_climod(
+    int epfd,
+    struct client *cli,
+    int mode
+);
+
 int close_client(struct allocator *allc, int epfd, struct client *cli);
 
 int run_server(
     struct allocator *allc,
     struct ssocket_md *server,
     struct ev_loop   *loop,
-    atomic_bool *is_running,
+    ATOMIC_BOOL *is_running,
     void *(*async_worker)(void *),
     void (*custom_acceptor)(struct client *cli, void *state_holder),
     void (*custom_disconnector)(struct client *cli, void *state_holder),
-    void *state_holder
+    void *state_holder,
+    int  *epfd
 );
+
+#ifdef __cplusplus
+}
+#endif

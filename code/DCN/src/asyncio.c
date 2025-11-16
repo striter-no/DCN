@@ -1,7 +1,8 @@
 #include <asyncio.h>
-#include <stdatomic.h>
+#include <atomic_wrapper.h>
 #include <threads.h>
 #include <time.h>
+
 
 void __coroutine_init(
     struct allocator *allc,
@@ -294,6 +295,7 @@ int __events_worker(void *_args){
         size_t ev_len = loop->events.len;
         mtx_unlock(&loop->events._mtx);
         
+        bool had_events = false;
         for (size_t i = 0; i < ev_len; i++){
             ullong ev_uid = 0;
             map_key_at( &loop->events, &ev_uid, i );
@@ -308,6 +310,7 @@ int __events_worker(void *_args){
                 continue;
 
             if (event->trigger.func(loop)){
+                had_events = true;
                 struct __workers_strct *strc = NULL;
                 map_at(&loop->workers, &ev_uid, (void**)&strc);
                 if (strc == NULL)
@@ -324,6 +327,11 @@ int __events_worker(void *_args){
                 mtx_unlock(strc->_mtx);
             }
         }
+        
+        // Avoid busy waiting: yield if no events were processed
+        if (!had_events && ev_len == 0) {
+            thrd_yield();
+        }
     }
 
     return thrd_success;
@@ -334,7 +342,7 @@ void loop_create(
     struct ev_loop *loop,
     ssize_t cores
 ){
-    mtx_init(&loop->events_mtx, mtx_plain);
+    // mtx_init(&loop->events_mtx, mtx_plain);
     loop->allc = allc;
     loop->g_euid = 1;
     
@@ -355,7 +363,7 @@ void loop_create(
         sizeof(ullong), 
         sizeof(struct asyncio_event*)
     );
-    thrd_create(&loop->events_thread, __events_worker, loop);
+    // thrd_create(&loop->events_thread, __events_worker, loop);
 }
 
 void loop_run(
@@ -369,8 +377,8 @@ void loop_stop(
 ){
     //**printf("loop_stop\n");
     atomic_store(&loop->working_pool.is_active, false);
-    thrd_join(loop->events_thread, NULL);
-    mtx_destroy(&loop->events_mtx);
+    // thrd_join(loop->events_thread, NULL);
+    // mtx_destroy(&loop->events_mtx);
     pool_free(&loop->working_pool);
 
     for (size_t i = 0; i < loop->workers.len; i++){
@@ -431,8 +439,8 @@ void **asyncio_gather(
 
     mtx_t mutex;
     cnd_t cond;
-    atomic_size_t done = 0;
-    atomic_bool   is_ready = false;
+    ATOMIC_SIZE_T done = 0;
+    ATOMIC_BOOL   is_ready = false;
     mtx_init(&mutex, mtx_plain);
     cnd_init(&cond);
 
@@ -467,3 +475,8 @@ void **asyncio_gather(
     cnd_destroy(&cond);
     return results;
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

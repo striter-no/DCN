@@ -1,5 +1,6 @@
 #include <queue.h>
 
+
 void generic_qbfill(struct allocator *allc, struct qblock *out, void *data, size_t data_size){
     out->data = alc_realloc(allc, out->data, data_size);
     memcpy(out->data, data, data_size);
@@ -169,3 +170,7 @@ bool queue_forward(struct queue *to, struct queue *from, bool peek){
 
     return true;
 }
+
+#ifdef __cplusplus
+}
+#endif

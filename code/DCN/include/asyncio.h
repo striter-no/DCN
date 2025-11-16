@@ -1,14 +1,18 @@
 #pragma once
-#include "queue.h"
+#include <atomic_wrapper.h>
+#include <allocator.h>
+#include <queue.h>
 #include <map.h>
-#include <stdbool.h>
-#include <stdatomic.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <sys/types.h>
 #include <thr-pool.h>
 #include <threads.h>
 #include <unistd.h>
-#include <allocator.h>
 
 typedef struct future Future;
 #define asyncdef void *
@@ -36,7 +40,7 @@ struct __workers_strct {
 
 struct ev_loop {
     struct allocator *allc;
-    atomic_ullong g_euid;
+    ATOMIC_ULLONG g_euid;
     struct pool working_pool;
 
     mtx_t events_mtx;
@@ -59,7 +63,7 @@ struct asyncio_event {
 };
 
 struct waiter {
-    atomic_bool is_ready;
+    ATOMIC_BOOL is_ready;
     mtx_t *cmtx;
     cnd_t *wcond;
 };
@@ -153,3 +157,7 @@ void **asyncio_gather(
     Future **futures,
     size_t fut_sz
 );
+
+#ifdef __cplusplus
+}
+#endif

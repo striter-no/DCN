@@ -1,4 +1,9 @@
 #pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <string.h>
 #include <stdbool.h>
 #include <threads.h>
@@ -30,3 +35,7 @@ int map_set(struct map *map, void *key, void *val);
 int map_erase(struct map *map, void *key);
 int map_key_at(struct map *map, void *out, size_t inx);
 int map_val_at(struct map *map, void *out, size_t inx);
+
+#ifdef __cplusplus
+}
+#endif

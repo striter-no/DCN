@@ -1,6 +1,7 @@
 #include <allocator.h>
 #include <threads.h>
 
+
 size_t hash_ptr(void *ptr, size_t table_size){
     return ((uintptr_t)ptr * 2654435761UL) % table_size;
 }
@@ -210,3 +211,8 @@ void alc_gcollect(
     allc->size = 0;
     mtx_unlock(&allc->_mtx);
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

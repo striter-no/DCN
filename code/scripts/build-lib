@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <executable_name> [compiler]"
+    echo "Example: $0 router gcc"
+    exit 1
+fi
+
+EXEC_NAME=$1
+CXX=${3:-g++}
+CC=${2:-gcc}
+CFLAGS="-pedantic -Wall -Wextra -g" # -fsanitize=address
+CINCL="../code/DCN/include"
+CLIB="../code/DCN/lib"
+LIBS="-lm"
+
+reset
+mkdir -p ./build
+cd ./build
+rm -rf ./*.o
+
+for file in $(find ../code/DCN/src -type f -name "*.c"); do
+    base=$(basename "$file" .c)
+    dirname=$(dirname "$file")
+    subdir=$(basename "$dirname")
+    echo "compiling to ${subdir}_${base}.o ..."
+    $CC $CFLAGS -c "$file" -I $CINCL -L $CLIB $LIBS -o "${subdir}_${base}.o"
+done
+
+$CXX $CFLAGS -c ../code/"$EXEC_NAME".cpp -I $CINCL -L $CLIB $LIBS
+$CXX ./*.o -o "$EXEC_NAME"
+
+mv ./"$EXEC_NAME" ../
+cd ..
+
+if [ $? -eq 0 ]; then
+    echo -e "\033[1;32mCompilation successful!\033[0m"
+    mv "$EXEC_NAME" ./bin/
+    echo "Executable moved to ./bin/$EXEC_NAME"
+else
+    echo -e "\033[1;31mCompilation failed!\033[0m"
+    exit 1
+fi

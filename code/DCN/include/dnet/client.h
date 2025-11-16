@@ -7,6 +7,11 @@
 #include <array.h>
 #include <logger.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 /*
 How it works
 
@@ -52,7 +57,7 @@ struct dcn_client {
 
     struct ev_loop   *loop;
     struct socket_md *md;
-    atomic_bool *is_running;
+    ATOMIC_BOOL *is_running;
 };
 
 struct usr_resp {
@@ -70,7 +75,7 @@ struct usr_waiter {
 struct dcn_session {
     struct logger *lgr;
     struct dcn_client *client;
-    atomic_bool is_active;
+    ATOMIC_BOOL is_active;
 
     mtx_t usr_waiters_mtx;
     mtx_t usr_responses_mtx;
@@ -230,3 +235,7 @@ Future *traceroute_ans(
 Future *async_gtraceroutes(
     struct dcn_session *session
 );
+
+#ifdef __cplusplus
+}
+#endif

@@ -2,6 +2,7 @@
 #include <threads.h>
 #include <time.h>
 
+
 // async function in run_client (gather any responses)
 void *__dcn_on_message(void *_args){
     //**printf("__dcn_on_message: started\n");
@@ -957,3 +958,8 @@ void dnet_stop(struct dnet_state *state){
     dcn_end_session(&state->session);
     close(state->socket.fd);
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

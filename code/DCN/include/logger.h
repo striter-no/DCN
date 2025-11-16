@@ -2,9 +2,13 @@
 #define _GNU_SOURCE
 #include <allocator.h>
 #include <array.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <threads.h>
 #include <unistd.h>
-// #include <unistdio.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <stdarg.h>
@@ -59,3 +63,7 @@ void logger_act(
 void logger_deact(
     struct logger *log
 );
+
+#ifdef __cplusplus
+}
+#endif

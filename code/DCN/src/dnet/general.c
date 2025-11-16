@@ -1,6 +1,7 @@
 #include <dnet/general.h>
 #include <stddef.h>
 
+
 size_t packet_general_ofs(void){
     return sizeof(ullong) * 6 + sizeof(size_t) + sizeof(PACKET_TYPE) + sizeof(bool);
 }
@@ -222,4 +223,9 @@ bool trp_data_deserial(
     memcpy(trpd, data->data, trp_offset());
     return true;
 }
+
+
+// #ifdef __cplusplus
+// }
+// #endif
 

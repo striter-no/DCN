@@ -1,5 +1,6 @@
 #include <netw/client.h>
-#include <stdatomic.h>
+#include <atomic_wrapper.h>
+
 
 int ccreate_socket(
     struct socket_md *smd,
@@ -90,7 +91,7 @@ int cfull_read(
 
 void run_client(
     struct socket_md *md,
-    atomic_bool *is_running,
+    ATOMIC_BOOL *is_running,
     struct ev_loop *loop,
     void *(*on_message)(void*),
     struct queue *qread, 
@@ -204,61 +205,7 @@ void run_client(
     //**printf("run_client: ended\n"); 
 }
 
-// int __worker(void *_args){
-//     struct worker_args *args = _args;
-
-//     while (atomic_load(args->is_running)){
-//         struct qblock block, oblock;
-//         qblock_init(&block);
-//         qblock_init(&oblock);
-//         if (1 == pop_block(args->qr, &block))
-//             continue;
-
-//         args->worker_fn(&block, &oblock);
-        
-//         if (oblock.data != NULL){
-//             push_block(args->qw, &oblock);
-//             qblock_free(&oblock);
-//         }
-//         qblock_free(&block);
-//     }
-
-//     return thrd_success;
+// #ifdef __cplusplus
 // }
+// #endif
 
-// void cstate_init(
-//     struct socket_md *sock,
-//     struct c_state *state,
-//     void (*worker)(struct qblock *, struct qblock *)
-// ){
-//     state->is_running = true;
-//     state->sock = sock;
-//     state->worker = worker;
-
-//     queue_init(&state->qwrite);
-//     queue_init(&state->qread);
-// }
-
-// void cstate_run(
-//     struct socket_md *md,
-//     struct c_state *state
-// ){
-//     thrd_create(&state->_wthread, __worker, &(struct worker_args){
-//         .qr = &state->qread,
-//         .qw = &state->qwrite,
-//         .is_running = &state->is_running,
-//         .worker_fn = state->worker
-//     });
-
-//     run_client(md, &state->is_running, &state->qread, &state->qwrite);
-// }
-
-// void cstate_free(
-//     struct c_state *state
-// ){
-//     atomic_store(&state->is_running, false);
-//     thrd_join(state->_wthread, NULL);
-
-//     queue_free(&state->qread);
-//     queue_free(&state->qwrite);
-// }

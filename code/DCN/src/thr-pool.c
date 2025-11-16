@@ -1,5 +1,5 @@
 #include <queue.h>
-#include <stdatomic.h>
+#include <atomic_wrapper.h>
 #include <thr-pool.h>
 #include <threads.h>
 
@@ -160,3 +160,8 @@ void await_future(struct future *fut, struct qblock *out){
     qblock_copy(fut->pool->allc, out, &(fut->out_block));
     __future_free(fut);
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

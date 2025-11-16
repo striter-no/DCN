@@ -1,6 +1,11 @@
 #pragma once
 #include <queue.h>
 #include <asyncio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    
 #include <stdio.h>
 
 typedef enum {
@@ -112,3 +117,7 @@ struct packet create_traceroute(
 );
 
 size_t packet_general_ofs(void);
+
+#ifdef __cplusplus
+}
+#endif

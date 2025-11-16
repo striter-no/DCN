@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <threads.h>
 
+
 void array_init(struct array *arr, size_t element){
     mtx_init(&arr->_mtx, mtx_recursive);
     arr->blocks = NULL;
@@ -144,3 +145,8 @@ int array_copy_at(struct array *arr, void *out, size_t inx){
     mtx_unlock(&arr->_mtx);
     return 0;
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+

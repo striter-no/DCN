@@ -1,6 +1,17 @@
 #pragma once
 #define _GNU_SOURCE
-#include <stdatomic.h>
+#define MAX_BUFFER_SIZE 1024
+
+#include <atomic_wrapper.h>
+
+#include <dnet/general.h>
+#include <queue.h>
+#include <asyncio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <threads.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,12 +22,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <string.h>
-
-#include <dnet/general.h>
-#include <queue.h>
-#include <asyncio.h>
-
-#define MAX_BUFFER_SIZE 1024
 
 struct worker_args {
     void *state_holder;
@@ -60,10 +65,14 @@ int cfull_read(
 
 void run_client(
     struct socket_md *md,
-    atomic_bool *is_running,
+    ATOMIC_BOOL *is_running,
     struct ev_loop *loop,
     void *(*on_message)(void*),
     struct queue *qread, 
     struct queue *qwrite,
     void *state_holder
 );
+
+#ifdef __cplusplus
+}
+#endif

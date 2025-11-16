@@ -1,11 +1,18 @@
 #pragma once
+
+#include <atomic_wrapper.h>
+#include <allocator.h>
+#include <queue.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <sys/types.h>
 #include <threads.h>
-#include <stdatomic.h>
 #include <unistd.h>
-#include "queue.h"
-#include <allocator.h>
+
 
 struct pool {
     struct allocator *allc;
@@ -17,7 +24,7 @@ struct pool {
     size_t  workers;
     struct queue q;
 
-    atomic_bool is_active;
+    ATOMIC_BOOL is_active;
 };
 
 struct future {
@@ -25,14 +32,14 @@ struct future {
     struct qblock inp_block;
     struct qblock out_block;
 
-    atomic_bool is_ready;
+    ATOMIC_BOOL is_ready;
     mtx_t    cond_mtx;
     cnd_t    is_done;
 
-    atomic_bool   *shared_is_ready;
+    ATOMIC_BOOL   *shared_is_ready;
     mtx_t         *shared_cond_mtx;
     cnd_t         *shared_is_done;
-    atomic_size_t *shared_done;
+    ATOMIC_SIZE_T *shared_done;
 };
 
 struct task {
@@ -75,3 +82,7 @@ void await_future(
     struct future *fut, 
     struct qblock *out
 );
+
+#ifdef __cplusplus
+}
+#endif

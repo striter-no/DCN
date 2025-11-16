@@ -167,6 +167,7 @@ void *dcn_async_worker(void *_args){
         qblock_free(allc, &_ansblock);
 
         packet_free(allc, &answer);
+        change_climod(serv->epfd, cli, 1);
         return NULL;
     }
 
@@ -280,6 +281,7 @@ void *dcn_async_worker(void *_args){
             packet_free(allc, &pack);
             packet_free(allc, &answer);
             printf("dcn_async_worker exit\n");
+            change_climod(serv->epfd, cli, 1);
             return NULL;
         } else {
             printf(" answering back to sender with errc 200\n");
@@ -347,6 +349,7 @@ void *dcn_async_worker(void *_args){
         qblock_free(allc, &ansblock);
 
         printf("dcn_async_worker exit\n");
+        change_climod(serv->epfd, cli, 1);
         return NULL;
     } else {
         mtx_lock(&serv->dcn_clients._mtx);
@@ -385,7 +388,6 @@ void *dcn_async_worker(void *_args){
             to_cli_answer.cmuid = pack.cmuid;
             to_cli_answer.packtype = pack.packtype;
             to_cli_answer.trav_fuid = pack.trav_fuid;
-            packet_free(allc, &pack);
             packet_serial(
                 allc, 
                 &to_cli_answer, 
@@ -397,8 +399,9 @@ void *dcn_async_worker(void *_args){
                 qblock_free(allc, &ansblock);
                 continue;
             }
-
+            
             if (to_cli->fd > 0) {
+                change_climod(serv->epfd, to_cli, 1);
                 push_block(&to_cli->write_q, &ansblock);
                 printf(
                     " [brd] message sent (%llu->%llu (%i->%i fd) (#%llu/#%llu) %zu bytes) | trav_fuid: %llu | queue size: %zu\n", 
@@ -421,6 +424,9 @@ void *dcn_async_worker(void *_args){
 
             printf("dcn_async_worker exit\n");
         }
+
+        packet_free(allc, &pack);
+        change_climod(serv->epfd, cli, 1);
         return NULL;
     }
 }
@@ -430,7 +436,7 @@ void dcn_serv_init(
     struct dcn_server *serv,
     struct ev_loop    *loop,
     struct ssocket_md  *sock,
-    atomic_bool *is_running
+    ATOMIC_BOOL *is_running
 ){
     serv->allc = allc;
     serv->loop = loop;
@@ -477,6 +483,12 @@ void dcn_serv_run(
         dcn_async_worker,
         __dcn_acceptor, 
         __dcn_disconnector,
-        serv
+        serv,
+        &serv->epfd
     );
 }
+
+// #ifdef __cplusplus
+// }
+// #endif
+
